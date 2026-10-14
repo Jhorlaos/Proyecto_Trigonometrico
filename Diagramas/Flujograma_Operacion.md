@@ -1,9 +1,11 @@
 # Flujograma 1 - Operación matemática
+# Flujograma 1: Operación completa
+
+```mermaid
 flowchart TD
-    
-    
     A([Inicio]) --> B[/Solicitar al usuario operacion y operandos/]
     B --> C{¿La operacion existe en el catalogo?}
+    
     C -- No --> D[Generar mensaje 'Operacion inexistente']
     D --> E[[Guarda en BD calculo con exito=0 y mensaje de error]]
     E --> F[/Mostrar mensaje de error al usuario/]
@@ -30,6 +32,11 @@ flowchart TD
     Q --> R{¿La respuesta de Python inicia con OK?}
     
     R -- No --> S[Capturar mensaje de error devuelto por Python]
+    S --> E
+    
+    R -- Sí --> T[Extraer valor numerico de la respuesta de Python]
+    T --> N
+```
     S --> E
     
     R -- Sí --> T[Extraer valor numerico de la respuesta de Python]
