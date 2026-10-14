@@ -3,7 +3,6 @@
 flowchart TD
     A([Inicio]) --> B[/Solicitar al usuario operacion y operandos/]
     B --> C{¿La operacion existe en el catalogo?}
-    
     C -- No --> D[Generar mensaje 'Operacion inexistente']
     D --> E[[Guarda en BD calculo con exito=0 y mensaje de error]]
     E --> F[/Mostrar mensaje de error al usuario/]
