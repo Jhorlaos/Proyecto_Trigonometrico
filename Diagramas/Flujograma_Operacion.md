@@ -1,4 +1,3 @@
-# Flujograma 1 - Operación matemática
 # Flujograma 1: Operación completa
 
 ```mermaid
