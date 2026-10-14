@@ -1,10 +1,6 @@
 
 # Diagrama de Clases UML
 
-**Proyecto:** Calculadora Java, Python y SQLite
-
-**Asignatura:** Programación Orientada a Objetos II (POO2)
-
 Este diagrama representa las clases, interfaces, atributos, métodos, excepciones y relaciones del sistema integrado de la calculadora.
 
 ```mermaid
