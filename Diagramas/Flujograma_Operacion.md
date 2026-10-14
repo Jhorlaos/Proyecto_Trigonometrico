@@ -35,8 +35,9 @@ flowchart TD
     
     R -- Sí --> T[Extraer valor numerico de la respuesta de Python]
     T --> N
-```
+
     S --> E
     
     R -- Sí --> T[Extraer valor numerico de la respuesta de Python]
     T --> N
+    ```
