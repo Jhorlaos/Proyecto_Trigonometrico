@@ -1,6 +1,7 @@
 # Flujograma 1 - Operación matemática
-
 flowchart TD
+    
+    
     A([Inicio]) --> B[/Solicitar al usuario operacion y operandos/]
     B --> C{¿La operacion existe en el catalogo?}
     C -- No --> D[Generar mensaje 'Operacion inexistente']
