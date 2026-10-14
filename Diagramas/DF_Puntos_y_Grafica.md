@@ -1,8 +1,10 @@
-flowchart TD
-    
 
+# Flujograma 2: Generación de puntos y gráfica
+
+```mermaid
+flowchart TD
     A([Inicio]) --> B[/Solicitar funcion, xmin, xmax, paso y modo de angulo/]
-    B --> C{¿xmin < xmax y paso > 0?}
+    B --> C{"¿xmin < xmax y paso > 0?"}
     
     C -- No --> D[Generar mensaje 'Rango o paso invalido']
     D --> E[/Mostrar mensaje de error al usuario/]
@@ -34,3 +36,5 @@ flowchart TD
     
     Q -- Sí --> S[/Mostrar imagen PNG generada al usuario/]
     S --> Z
+```
+
