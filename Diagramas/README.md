@@ -5,5 +5,5 @@ Esta carpeta contiene los diagramas correspondientes al proyecto integrado de la
 ## Diagramas
 - Flujograma 1: Operaciones matemáticas.
 - Flujograma 2: Generación de puntos y gráficas.
-- Diagrama entidad-relación (pendiente).
-- Diagrama de clases (pendiente).
+- Diagrama entidad-relación.
+- Diagrama de clases.
