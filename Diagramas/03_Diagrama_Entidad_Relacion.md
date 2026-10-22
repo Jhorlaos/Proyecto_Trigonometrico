@@ -3,48 +3,63 @@
 
 Proyecto integrado: Calculadora Java, Python y SQLite.
 
+Este diagrama representa las entidades, atributos, claves primarias (PK), claves foráneas (FK), restricciones y cardinalidades del sistema.
+
 ```mermaid
 erDiagram
-    OPERACION ||--o{ CALCULO : "se ejecuta en (1:N)"
-    OPERACION ||--o{ SERIE : "genera (1:N)"
-    SERIE ||--|{ PUNTO : "contiene (1:N)"
+    %% Relaciones uno a muchos. Cada entidad hija tiene su propio id como PK.
+    %% Por eso las relaciones son no identificadoras (linea discontinua).
+    OPERACION ||..o{ CALCULO : registra
+    OPERACION ||..o{ SERIE : genera
+    SERIE ||..|{ PUNTO : contiene
 
     OPERACION {
-        int id PK
-        string simbolo UK "Not Null"
-        string nombre "Not Null"
-        string tipo "CHECK: BASICA, TRIGONOMETRICA"
-        string lenguaje "CHECK: JAVA, PYTHON"
-        int aridad "CHECK: 1, 2"
+        INTEGER id PK "PRIMARY KEY"
+        TEXT simbolo UK "NOT NULL UNIQUE"
+        TEXT nombre "NOT NULL"
+        TEXT tipo "NOT NULL CHECK BASICA o TRIGONOMETRICA"
+        TEXT lenguaje "NOT NULL CHECK JAVA o PYTHON"
+        INTEGER aridad "NOT NULL CHECK 1 o 2"
     }
 
     CALCULO {
-        int id PK
-        int operacion_id FK "Not Null"
-        double operando_a "Not Null"
-        double operando_b "Null para aridad 1"
-        string modo_angulo "CHECK: grados, radianes, Null"
-        double resultado "Null si falla"
-        int exito "CHECK: 0, 1"
-        string mensaje_error "Null si exito=1"
-        datetime creado_en "Default CURRENT_TIMESTAMP"
+        INTEGER id PK "PRIMARY KEY"
+        INTEGER operacion_id FK "NOT NULL"
+        REAL operando_a "NOT NULL"
+        REAL operando_b "NULL si la aridad es 1"
+        TEXT modo_angulo "NULL basica; grados o radianes trig"
+        REAL resultado "NULL si exito es 0"
+        INTEGER exito "NOT NULL CHECK 0 o 1"
+        TEXT mensaje_error "NULL si exito es 1"
+        TEXT creado_en "NOT NULL DEFAULT CURRENT_TIMESTAMP"
     }
 
     SERIE {
-        int id PK
-        int operacion_id FK "Not Null"
-        string nombre "Not Null"
-        double x_min "Not Null"
-        double x_max "Not Null"
-        double paso "CHECK: paso > 0"
-        string modo_angulo "CHECK: grados, radianes"
-        datetime creado_en "Default CURRENT_TIMESTAMP"
+        INTEGER id PK "PRIMARY KEY"
+        INTEGER operacion_id FK "NOT NULL"
+        TEXT nombre "NOT NULL"
+        REAL x_min "NOT NULL"
+        REAL x_max "NOT NULL CHECK x_min menor que x_max"
+        REAL paso "NOT NULL CHECK mayor que 0"
+        TEXT modo_angulo "NOT NULL grados o radianes"
+        TEXT creado_en "NOT NULL DEFAULT CURRENT_TIMESTAMP"
     }
 
     PUNTO {
-        int id PK
-        int serie_id FK "Not Null, On Delete Cascade"
-        double x "Not Null"
-        double y "Null si es indefinido (ej. tan 90°)"
+        INTEGER id PK "PRIMARY KEY"
+        INTEGER serie_id FK "NOT NULL ON DELETE CASCADE"
+        REAL x "NOT NULL"
+        REAL y "NULL si la funcion no esta definida"
     }
+
+    %% Reglas adicionales a implementar en create_schema.sql:
+    %% 1) CHECK combinado: tipo BASICA usa JAVA; TRIGONOMETRICA usa PYTHON.
+    %% 2) CHECK combinado: exito=1 exige resultado NOT NULL y mensaje_error NULL.
+    %%    exito=0 exige resultado NULL y mensaje_error NOT NULL.
+    %% 3) CHECK: x_min < x_max, paso > 0 y modo_angulo valido.
+    %% 4) FOREIGN KEY: operacion_id y serie_id deben existir.
+    %% 5) Aridad y modo de CALCULO dependen de OPERACION:
+    %%    se validaran en la aplicacion o con triggers de SQLite.
+    %% 6) Al menos un PUNTO por SERIE se asegura al generar
+    %%    y guardar la serie completa dentro de una transaccion.
 ```
