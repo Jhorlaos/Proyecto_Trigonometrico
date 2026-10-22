@@ -1,4 +1,9 @@
+
 # Flujograma 1: Operación completa
+
+**Proyecto:** Calculadora Java, Python y SQLite
+
+Este flujograma representa el proceso de ejecución de operaciones matemáticas, validación de datos, manejo de errores y almacenamiento de los resultados en la base de datos.
 
 ```mermaid
 flowchart TD
@@ -52,3 +57,10 @@ flowchart TD
     N2 -- No --> X[Generar mensaje de error al guardar]
     X --> Y[/Mostrar error de almacenamiento al usuario/]
     Y --> Z
+
+    E --> E2{¿Se guardo el calculo fallido?}
+    E2 -- Sí --> F2[/Mostrar mensaje del error matematico o de Python/]
+    F2 --> Z
+    E2 -- No --> X
+```
+
