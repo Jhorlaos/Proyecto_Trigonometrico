@@ -2,54 +2,51 @@
 # Flujograma 2: Generación de puntos y gráfica
 
 ```mermaid
+
 flowchart TD
-    A([Inicio]) --> B[/Solicitar operacion y operandos al usuario/]
-    B --> C{¿La operacion existe en el catalogo?}
+    A([Inicio]) --> B[/Solicitar funcion, xmin, xmax, paso y modo de angulo/]
+    B --> C{¿La funcion existe y es trigonometrica?}
 
-    C -- No --> D[Generar mensaje de operacion inexistente]
-    D --> F[/Mostrar mensaje de validacion/]
-    F --> Z([Fin])
+    C -- No --> D[Generar mensaje de funcion no valida]
+    D --> E[/Mostrar mensaje de error al usuario/]
+    E --> Z([Fin])
 
-    C -- Sí --> CAT[Consultar tipo y aridad en el catalogo]
-    CAT --> I{¿La operacion es basica?}
+    C -- Sí --> F[Validar numeros, rango, paso y modo de angulo]
+    F --> G{¿Los parametros son validos?}
+    G -- No --> H[Generar mensaje de parametros invalidos]
+    H --> E
 
-    %% Camino de operaciones basicas en Java
-    I -- Sí --> G[Validar operandos segun la aridad]
-    G --> H{¿Los operandos son numericos y la cantidad es correcta?}
-    H -- No --> U[Generar mensaje de entradas invalidas]
-    U --> F
+    %% Python genera todos los puntos antes de almacenarlos
+    G -- Sí --> I[Invocar trig.py serie mediante ProcessBuilder]
+    I --> J{¿Python devolvio la serie sin error?}
+    J -- No --> K[Capturar mensaje de error de Python]
+    K --> E
+    J -- Sí --> L[Recibir lista de pares x;y]
+    L --> M{¿La lista contiene puntos?}
+    M -- No --> N[Generar mensaje de serie vacia]
+    N --> E
 
-    H -- Sí --> J{¿Es division con divisor igual a cero?}
-    J -- Sí --> K[Lanzar DivisionPorCeroException]
-    K --> L[Capturar mensaje de division por cero]
-    L --> E[[Guardar calculo fallido con resultado NULL y mensaje, con espera limitada ante bloqueos temporales de SQLite mediante busy_timeout en la conexion JDBC]]
+    M -- Sí --> O[Validar formato y valores de todos los pares x;y]
+    O --> P{¿Todos los puntos tienen formato correcto?}
+    P -- No --> Q[Generar mensaje de puntos malformados]
+    Q --> E
+    P -- Sí --> R[Convertir y vacia en NULL y detectar puntos indefinidos]
 
-    J -- No --> M[Calcular resultado en Java]
-    M --> M2{¿El calculo produjo un resultado valido?}
-    M2 -- No --> L2[Capturar mensaje de error del calculo]
-    L2 --> E
-    M2 -- Sí --> N[[Guardar calculo exitoso con resultado, con espera limitada ante bloqueos temporales de SQLite mediante busy_timeout en la conexion JDBC]]
+    %% La serie y sus puntos se guardan como una sola unidad
+    R --> S[[Guardar encabezado de serie y puntos en una transaccion]]
+    S --> T{¿Se confirmo el guardado completo con COMMIT?}
+    T -- No --> U[Revertir cambios pendientes con ROLLBACK]
+    U --> V[/Mostrar error de almacenamiento al usuario/]
+    V --> Z
 
-    %% Camino de operaciones trigonometricas en Python
-    I -- No --> P[/Solicitar modo de angulo al usuario/]
-    P --> V{¿El modo es grados o radianes?}
-    V -- No --> W[Generar mensaje de modo invalido]
-    W --> F
-
-    V -- Sí --> GT[Validar operandos segun la aridad]
-    GT --> HT{¿Los operandos son numericos y la cantidad es correcta?}
-    HT -- No --> U
-    HT -- Sí --> Q[Ejecutar trig.py mediante ProcessBuilder]
-    Q --> R{¿Python devolvio OK con un numero valido?}
-    R -- No --> S[Capturar ERROR de Python o fallo de ejecucion]
-    S --> E
-    R -- Sí --> T[Extraer resultado numerico de Python]
-    T --> N
-
-    %% Comprobar persistencia y mostrar la salida correcta
-    N --> N2{¿Se guardo el calculo exitoso?}
-    N2 -- Sí --> O[/Mostrar resultado al usuario/]
-    O --> Z
-    N2 -- No --> X[Generar mensaje de error al guardar]
-    X --> Y[/Mostrar error de almacenamiento al usuario/]
+    %% graficar.py obtiene los puntos ya almacenados en SQLite
+    T -- Sí --> W[Invocar graficar.py con ruta BD, serie_id y archivo PNG]
+    W --> X{¿Se genero el PNG correctamente?}
+    X -- No --> Y[/Mostrar error de grafica e indicar que la serie esta guardada/]
     Y --> Z
+    X -- Sí --> AA{¿Hay puntos con y igual a NULL?}
+    AA -- Sí --> AB[/Mostrar PNG y advertencia de puntos indefinidos/]
+    AB --> Z
+    AA -- No --> AC[/Mostrar PNG generado al usuario/]
+    AC --> Z
+
