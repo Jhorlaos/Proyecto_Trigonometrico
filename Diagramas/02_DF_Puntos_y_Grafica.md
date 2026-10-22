@@ -1,8 +1,10 @@
 
+
 # Flujograma 2: Generación de puntos y gráfica
 
-```mermaid
+Este flujograma describe la validación de rangos, generación de puntos mediante Python, almacenamiento en SQLite y creación de gráficas en formato PNG.
 
+```mermaid
 flowchart TD
     A([Inicio]) --> B[/Solicitar funcion, xmin, xmax, paso y modo de angulo/]
     B --> C{¿La funcion existe y es trigonometrica?}
@@ -49,4 +51,4 @@ flowchart TD
     AB --> Z
     AA -- No --> AC[/Mostrar PNG generado al usuario/]
     AC --> Z
-
+```
