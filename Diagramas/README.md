@@ -7,3 +7,7 @@ Esta carpeta contiene los diagramas correspondientes al proyecto integrado de la
 - Flujograma 2: Generación de puntos y gráficas.
 - Diagrama entidad-relación.
 - Diagrama de clases.
+
+## Recomendación
+
+- Los diagramas de deberán ver en GitHub ya que en una carpeta instalada solo se visualizara el código de Mermaid 
