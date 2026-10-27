@@ -29,3 +29,4 @@ replay_pid*
 # Archivos temporales o de bloqueo de SQLite (si se generan)
 *.db-wal
 *.db-shm
+/Calculadora/target/

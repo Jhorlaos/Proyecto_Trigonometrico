@@ -10,4 +10,4 @@ Esta carpeta contiene los diagramas correspondientes al proyecto integrado de la
 
 ## Recomendación
 
-- Los diagramas de deberán ver en GitHub ya que en una carpeta instalada solo se visualizara el código de Mermaid 
+- Los diagramas se deberán ver en GitHub ya que en una carpeta instalada solo se visualizara el código de Mermaid 
