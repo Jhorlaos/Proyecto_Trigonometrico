@@ -22,3 +22,10 @@
 # virtual machine crash logs, see http://www.java.com/en/download/help/error_hotspot.xml
 hs_err_pid*
 replay_pid*
+
+# Archivo de proyecto local de DB Browser
+*.sqbpro
+
+# Archivos temporales o de bloqueo de SQLite (si se generan)
+*.db-wal
+*.db-shm
