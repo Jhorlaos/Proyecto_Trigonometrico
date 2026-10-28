@@ -4,10 +4,12 @@
  */
 package com.calculadora.dao;
 
-/**
- *
- * @author Esteban
- */
+import com.calculadora.dto.OperacionDTO;
+import java.util.List;
+
 public interface OperacionDAO {
-    
+
+    OperacionDTO buscarPorSimbolo(String simbolo);
+
+    List<OperacionDTO> listarOperaciones();
 }

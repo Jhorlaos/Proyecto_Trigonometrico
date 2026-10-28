@@ -8,6 +8,11 @@ package com.calculadora.excepciones;
  *
  * @author Esteban
  */
-public class CalculadoraException {
+public class CalculadoraException extends RuntimeException {
+    
+    public CalculadoraException(String mensaje){ 
+    
+        super(mensaje);
+    }
     
 }

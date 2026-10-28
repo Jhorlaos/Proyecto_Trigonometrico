@@ -1,13 +1,9 @@
-/*
- * Click nbfs://nbhost/SystemFileSystem/Templates/Licenses/license-default.txt to change this license
- * Click nbfs://nbhost/SystemFileSystem/Templates/Classes/Interface.java to edit this template
- */
 package com.calculadora.servicio;
 
-/**
- *
- * @author Esteban
- */
+import com.calculadora.dominio.Operacion;
+
 public interface CalculadoraService {
+
+    double ejecutarYGuardar(Operacion operacion, double[] operandos);
     
 }

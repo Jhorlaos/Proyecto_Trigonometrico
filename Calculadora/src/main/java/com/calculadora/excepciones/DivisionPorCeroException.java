@@ -4,10 +4,9 @@
  */
 package com.calculadora.excepciones;
 
-/**
- *
- * @author Esteban
- */
-public class DivisionPorCeroException {
-    
+public class DivisionPorCeroException extends CalculadoraException {
+
+    public DivisionPorCeroException(String mensaje) {
+        super(mensaje);
+    }
 }
