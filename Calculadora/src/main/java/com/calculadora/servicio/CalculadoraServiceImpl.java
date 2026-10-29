@@ -8,6 +8,7 @@ import com.calculadora.dominio.Operacion;
 import com.calculadora.dto.CalculoDTO;
 import com.calculadora.dto.OperacionDTO;
 import com.calculadora.excepciones.CalculadoraException;
+import java.util.List;
 
 public class CalculadoraServiceImpl implements CalculadoraService {
 
@@ -20,7 +21,7 @@ public class CalculadoraServiceImpl implements CalculadoraService {
     }
 
     @Override
-    public double ejecutarYGuardar(Operacion operacion, double[] operandos) {
+    public double ejecutarYGuardar(Operacion operacion, double[] operandos) throws CalculadoraException {
         // 1. Obtener el ID de la operación desde la base de datos
         OperacionDTO opDTO = operacionDAO.buscarPorSimbolo(operacion.getSimbolo());
         int idOperacion = (opDTO != null) ? opDTO.getId() : -1;
@@ -50,7 +51,17 @@ public class CalculadoraServiceImpl implements CalculadoraService {
             registro.setMensajeError(e.getMessage());
             
             calculoDAO.guardarCalculo(registro); // Guardar el fallo en BD
-            throw e; // Relanzar la excepción para que la interfaz gráfica lo sepa
+            throw e; // Relanzar la excepción para que la UI sepa que ocurrió un error
+        }
+    }
+
+    @Override
+    public List<CalculoDTO> obtenerHistorial() throws CalculadoraException {
+        try {
+            // Pasamos (null, null) para traer todos los cálculos sin filtrar por ID de operación ni por éxito
+            return calculoDAO.obtenerHistorial(null, null);
+        } catch (Exception e) {
+            throw new CalculadoraException("Error al consultar el historial desde el servicio: " + e.getMessage());
         }
     }
 }
