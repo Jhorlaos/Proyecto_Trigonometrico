@@ -7,17 +7,15 @@ import java.sql.Statement;
 
 public class ConexionDB {
 
-    // Ruta absoluta a tu base de datos SQLite
-    private static final String URL = "jdbc:sqlite:C:/Users/Esteban/Desktop/Proyecto_Trigonometrico/db/calculadora.db";
+    private static final String URL = "jdbc:sqlite:../db/calculadora.db?busy_timeout=5000";
     private static Connection conexion = null;
 
-    private ConexionDB() {} // Constructor privado (Patrón Singleton)
+    private ConexionDB() {} 
 
     public static Connection getConexion() throws SQLException {
         if (conexion == null || conexion.isClosed()) {
             conexion = DriverManager.getConnection(URL);
             
-            // Habilitar el soporte de llaves foráneas en SQLite
             try (Statement stmt = conexion.createStatement()) {
                 stmt.execute("PRAGMA foreign_keys = ON;");
             }
