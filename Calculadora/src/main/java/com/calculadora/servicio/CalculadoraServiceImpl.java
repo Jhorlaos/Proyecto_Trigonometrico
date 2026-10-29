@@ -5,6 +5,7 @@ import com.calculadora.dao.CalculoDAOImpl;
 import com.calculadora.dao.OperacionDAO;
 import com.calculadora.dao.OperacionDAOImpl;
 import com.calculadora.dominio.Operacion;
+import com.calculadora.dominio.OperacionTrigonometrica;
 import com.calculadora.dto.CalculoDTO;
 import com.calculadora.dto.OperacionDTO;
 import com.calculadora.excepciones.CalculadoraException;
@@ -22,11 +23,16 @@ public class CalculadoraServiceImpl implements CalculadoraService {
 
     @Override
     public double ejecutarYGuardar(Operacion operacion, double[] operandos) throws CalculadoraException {
-        // 1. Obtener el ID de la operación desde la base de datos
+        // 1. Buscar la operación por símbolo (insensible a mayúsculas/minúsculas gracias a LOWER)
         OperacionDTO opDTO = operacionDAO.buscarPorSimbolo(operacion.getSimbolo());
-        int idOperacion = (opDTO != null) ? opDTO.getId() : -1;
 
-        // 2. Preparar el objeto DTO para guardar el historial
+        if (opDTO == null) {
+            throw new CalculadoraException("La operación '" + operacion.getSimbolo() + "' no se encuentra en la base de datos.");
+        }
+
+        int idOperacion = opDTO.getId();
+
+        // 2. Preparar el DTO para el historial
         CalculoDTO registro = new CalculoDTO();
         registro.setOperacionId(idOperacion);
         registro.setOperandoA(operandos[0]);
@@ -34,34 +40,48 @@ public class CalculadoraServiceImpl implements CalculadoraService {
             registro.setOperandoB(operandos[1]);
         }
 
+        // 3. Registrar el modo de ángulo
+        if (operacion instanceof OperacionTrigonometrica) {
+            OperacionTrigonometrica opTrig = (OperacionTrigonometrica) operacion;
+            registro.setModoAngulo(opTrig.getModoAngulo());
+        } else {
+            registro.setModoAngulo(null);
+        }
+
         try {
-            // 3. Ejecutar el cálculo matemático puro (Capa de Dominio)
+            // 4. Ejecutar el cálculo puro
             double resultado = operacion.calcular(operandos);
             
-            // 4. Si sale bien, completar el registro de éxito
+            // 5. Guardar éxito en SQLite
             registro.setResultado(resultado);
             registro.setExito(true);
+            registro.setMensajeError(null);
             
-            calculoDAO.guardarCalculo(registro); // Guardar en BD
+            calculoDAO.guardarCalculo(registro);
             return resultado;
             
-        } catch (CalculadoraException e) {
-            // 5. Si falla (ej. División por cero), registrar el error
+        } catch (Exception e) {
+            // 6. Guardar error en SQLite antes de relanzar la excepción a la UI
+            registro.setResultado(null);
             registro.setExito(false);
             registro.setMensajeError(e.getMessage());
             
-            calculoDAO.guardarCalculo(registro); // Guardar el fallo en BD
-            throw e; // Relanzar la excepción para que la UI sepa que ocurrió un error
+            calculoDAO.guardarCalculo(registro); // Al tener idOperacion válido, el INSERT pasará sin fallos de Foreign Key
+            
+            if (e instanceof CalculadoraException) {
+                throw (CalculadoraException) e;
+            } else {
+                throw new CalculadoraException(e.getMessage());
+            }
         }
     }
 
     @Override
     public List<CalculoDTO> obtenerHistorial() throws CalculadoraException {
         try {
-            // Pasamos (null, null) para traer todos los cálculos sin filtrar por ID de operación ni por éxito
             return calculoDAO.obtenerHistorial(null, null);
         } catch (Exception e) {
-            throw new CalculadoraException("Error al consultar el historial desde el servicio: " + e.getMessage());
+            throw new CalculadoraException("Error al consultar el historial: " + e.getMessage());
         }
     }
 }

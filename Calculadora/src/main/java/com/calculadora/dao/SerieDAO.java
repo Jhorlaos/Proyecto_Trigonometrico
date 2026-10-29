@@ -1,13 +1,10 @@
-/*
- * Click nbfs://nbhost/SystemFileSystem/Templates/Licenses/license-default.txt to change this license
- * Click nbfs://nbhost/SystemFileSystem/Templates/Classes/Interface.java to edit this template
- */
 package com.calculadora.dao;
 
-/**
- *
- * @author Esteban
- */
+import com.calculadora.dto.PuntoDTO;
+import com.calculadora.dto.SerieDTO;
+import java.util.List;
+
 public interface SerieDAO {
-    
+    int guardarSerieConPuntos(SerieDTO serie, List<PuntoDTO> puntos);
+    List<PuntoDTO> obtenerPuntos(int serieId);
 }

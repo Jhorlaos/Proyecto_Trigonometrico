@@ -15,6 +15,7 @@ import com.calculadora.servicio.CalculadoraService;
 import com.calculadora.servicio.CalculadoraServiceImpl;
 
 
+
 public class Calculator extends javax.swing.JFrame {
 
 // Variables para el flujo de la vista
@@ -25,6 +26,12 @@ public class Calculator extends javax.swing.JFrame {
 
     // --- CONEXIÓN CON EL BACKEND (N-TIER) ---
     private CalculadoraService servicio;
+    
+    // --- INTEGRACIÓN Y SERVICIOS ---
+   private com.calculadora.servicio.SerieService serieService = new com.calculadora.servicio.SerieServiceImpl();
+    private String modoActual = "grados"; 
+    private String funcionActual = "";
+    
 
     /**
      * Creates new form Calculator
@@ -34,7 +41,42 @@ public class Calculator extends javax.swing.JFrame {
         // Inicializamos el servicio al arrancar la ventana
         servicio = new CalculadoraServiceImpl();
     }
+    
+    private void ejecutarTrigonometria(String simbolo, String nombre) {
+        funcionActual = simbolo;
+        jBtn18.setVisible(true); // Hacer visible el botón de graficar
 
+        try {
+            double valor = Double.parseDouble(jTxtDisplay.getText());
+            
+            // Crear la operación trigonométrica de dominio
+            com.calculadora.dominio.OperacionTrigonometrica opTrig = 
+                new com.calculadora.dominio.OperacionTrigonometrica(simbolo, nombre);
+            opTrig.setModoAngulo(modoActual);
+
+            // Ejecutar y guardar en la base de datos a través del servicio
+            double res = servicio.ejecutarYGuardar(opTrig, new double[]{valor});
+            jTxtDisplay.setText(String.valueOf(res));
+
+        } catch (NumberFormatException e) {
+            javax.swing.JOptionPane.showMessageDialog(this, "Ingrese un número válido en la pantalla.", "Error de entrada", javax.swing.JOptionPane.ERROR_MESSAGE);
+        } catch (CalculadoraException e) {
+            javax.swing.JOptionPane.showMessageDialog(this, e.getMessage(), "Error en Cálculo / Python", javax.swing.JOptionPane.ERROR_MESSAGE);
+            jTxtDisplay.setText("Error");
+        }
+    }
+
+    private void agregarDigito(String digito) {
+        String textoActual = jTxtDisplay.getText();
+        
+        // Si la pantalla dice "Error" o es sólo "0", borra el texto y coloca el nuevo número
+        if (textoActual.equals("Error") || textoActual.equals("0")) {
+            jTxtDisplay.setText(digito);
+        } else {
+            jTxtDisplay.setText(textoActual + digito);
+        }
+    }
+    
     /**
      * This method is called from within the constructor to initialize the form.
      * WARNING: Do NOT modify this code. The content of this method is always
@@ -72,6 +114,7 @@ public class Calculator extends javax.swing.JFrame {
         jBtn15 = new javax.swing.JButton();
         jBtn16 = new javax.swing.JButton();
         jBtn17 = new javax.swing.JButton();
+        jBtn18 = new javax.swing.JButton();
 
         setDefaultCloseOperation(javax.swing.WindowConstants.EXIT_ON_CLOSE);
 
@@ -369,6 +412,17 @@ public class Calculator extends javax.swing.JFrame {
             }
         });
 
+        jBtn18.setBackground(new java.awt.Color(64, 64, 64));
+        jBtn18.setFont(new java.awt.Font("Tahoma", 1, 18)); // NOI18N
+        jBtn18.setForeground(new java.awt.Color(172, 230, 0));
+        jBtn18.setText("Graficar");
+        jBtn18.setAlignmentY(0.0F);
+        jBtn18.addActionListener(new java.awt.event.ActionListener() {
+            public void actionPerformed(java.awt.event.ActionEvent evt) {
+                jBtn18ActionPerformed(evt);
+            }
+        });
+
         javax.swing.GroupLayout jPanel1Layout = new javax.swing.GroupLayout(jPanel1);
         jPanel1.setLayout(jPanel1Layout);
         jPanel1Layout.setHorizontalGroup(
@@ -376,9 +430,6 @@ public class Calculator extends javax.swing.JFrame {
             .addGroup(jPanel1Layout.createSequentialGroup()
                 .addContainerGap()
                 .addGroup(jPanel1Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-                    .addGroup(jPanel1Layout.createSequentialGroup()
-                        .addComponent(jBtn17, javax.swing.GroupLayout.PREFERRED_SIZE, 73, javax.swing.GroupLayout.PREFERRED_SIZE)
-                        .addGap(0, 0, Short.MAX_VALUE))
                     .addGroup(jPanel1Layout.createSequentialGroup()
                         .addGroup(jPanel1Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.TRAILING, false)
                             .addComponent(jBtn11, javax.swing.GroupLayout.DEFAULT_SIZE, 85, Short.MAX_VALUE)
@@ -388,7 +439,11 @@ public class Calculator extends javax.swing.JFrame {
                         .addGroup(jPanel1Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
                             .addComponent(jBtn16, javax.swing.GroupLayout.DEFAULT_SIZE, 88, Short.MAX_VALUE)
                             .addComponent(jBtn14, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
-                            .addComponent(jBtn12, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))))
+                            .addComponent(jBtn12, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)))
+                    .addGroup(jPanel1Layout.createSequentialGroup()
+                        .addComponent(jBtn17, javax.swing.GroupLayout.PREFERRED_SIZE, 73, javax.swing.GroupLayout.PREFERRED_SIZE)
+                        .addGap(0, 0, Short.MAX_VALUE))
+                    .addComponent(jBtn18, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
                 .addContainerGap())
         );
         jPanel1Layout.setVerticalGroup(
@@ -408,6 +463,8 @@ public class Calculator extends javax.swing.JFrame {
                     .addComponent(jBtn16, javax.swing.GroupLayout.PREFERRED_SIZE, 73, javax.swing.GroupLayout.PREFERRED_SIZE))
                 .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
                 .addComponent(jBtn17, javax.swing.GroupLayout.PREFERRED_SIZE, 73, javax.swing.GroupLayout.PREFERRED_SIZE)
+                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.UNRELATED)
+                .addComponent(jBtn18, javax.swing.GroupLayout.PREFERRED_SIZE, 52, javax.swing.GroupLayout.PREFERRED_SIZE)
                 .addContainerGap(javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
         );
 
@@ -506,7 +563,7 @@ public class Calculator extends javax.swing.JFrame {
                             .addComponent(jBtnClear, javax.swing.GroupLayout.PREFERRED_SIZE, 73, javax.swing.GroupLayout.PREFERRED_SIZE)
                             .addComponent(jBtn10, javax.swing.GroupLayout.PREFERRED_SIZE, 73, javax.swing.GroupLayout.PREFERRED_SIZE)
                             .addComponent(jBtnResult, javax.swing.GroupLayout.PREFERRED_SIZE, 73, javax.swing.GroupLayout.PREFERRED_SIZE))
-                        .addGap(0, 0, Short.MAX_VALUE))
+                        .addGap(0, 6, Short.MAX_VALUE))
                     .addComponent(jPanel1, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
                 .addContainerGap())
         );
@@ -519,54 +576,47 @@ public class Calculator extends javax.swing.JFrame {
     }//GEN-LAST:event_jTxtDisplayActionPerformed
 
     private void jBtn1ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jBtn1ActionPerformed
-        String newNumber = jTxtDisplay.getText() + jBtn1.getText();
-        jTxtDisplay.setText(newNumber);
-
+        agregarDigito("1");
     }//GEN-LAST:event_jBtn1ActionPerformed
 
     private void jBtn2ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jBtn2ActionPerformed
-        String newNumber = jTxtDisplay.getText() + jBtn2.getText();
-        jTxtDisplay.setText(newNumber);
+       agregarDigito("2");
+       
     }//GEN-LAST:event_jBtn2ActionPerformed
 
     private void jBtn3ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jBtn3ActionPerformed
-         String newNumber = jTxtDisplay.getText() + jBtn3.getText();
-        jTxtDisplay.setText(newNumber);
+        agregarDigito("3");
+        
     }//GEN-LAST:event_jBtn3ActionPerformed
 
     private void jBtn4ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jBtn4ActionPerformed
-         String newNumber = jTxtDisplay.getText() + jBtn4.getText();
-        jTxtDisplay.setText(newNumber);
+        agregarDigito("4");
     }//GEN-LAST:event_jBtn4ActionPerformed
 
     private void jBtn5ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jBtn5ActionPerformed
-         String newNumber = jTxtDisplay.getText() + jBtn5.getText();
-        jTxtDisplay.setText(newNumber);
+      agregarDigito("5");
+       
     }//GEN-LAST:event_jBtn5ActionPerformed
 
     private void jBtn6ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jBtn6ActionPerformed
-         String newNumber = jTxtDisplay.getText() + jBtn6.getText();
-        jTxtDisplay.setText(newNumber);
+     agregarDigito("6");
     }//GEN-LAST:event_jBtn6ActionPerformed
 
     private void jBtn7ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jBtn7ActionPerformed
-         String newNumber = jTxtDisplay.getText() + jBtn7.getText();
-        jTxtDisplay.setText(newNumber);
+      agregarDigito("7");
+     
     }//GEN-LAST:event_jBtn7ActionPerformed
 
     private void jBtn8ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jBtn8ActionPerformed
-         String newNumber = jTxtDisplay.getText() + jBtn8.getText();
-        jTxtDisplay.setText(newNumber);
+       agregarDigito("8");
     }//GEN-LAST:event_jBtn8ActionPerformed
 
     private void jBtn9ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jBtn9ActionPerformed
-         String newNumber = jTxtDisplay.getText() + jBtn9.getText();
-        jTxtDisplay.setText(newNumber);
+     agregarDigito("9");
     }//GEN-LAST:event_jBtn9ActionPerformed
 
     private void jBtn0ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jBtn0ActionPerformed
-         String newNumber = jTxtDisplay.getText() + jBtn0.getText();
-        jTxtDisplay.setText(newNumber);
+         agregarDigito("0");
     }//GEN-LAST:event_jBtn0ActionPerformed
 
     private void jBtnNegativeNumActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jBtnNegativeNumActionPerformed
@@ -578,6 +628,13 @@ public class Calculator extends javax.swing.JFrame {
     private void jBtnDotActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jBtnDotActionPerformed
         String dotNew = jTxtDisplay.getText() + jBtnDot.getText();
         jTxtDisplay.setText(dotNew);
+        String textoActual = jTxtDisplay.getText();
+        
+        if (textoActual.equals("Error")) {
+            jTxtDisplay.setText("0.");
+        } else if (!textoActual.contains(".")) {
+            jTxtDisplay.setText(textoActual + ".");
+        }
     }//GEN-LAST:event_jBtnDotActionPerformed
 
     private void jBtnClearActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jBtnClearActionPerformed
@@ -753,32 +810,140 @@ try {
     }//GEN-LAST:event_jBtn10ActionPerformed
 
     private void jBtn11ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jBtn11ActionPerformed
-        // TODO add your handling code here:
+        ejecutarTrigonometria("sin", "Seno");
     }//GEN-LAST:event_jBtn11ActionPerformed
 
     private void jBtn12ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jBtn12ActionPerformed
-        // TODO add your handling code here:
+       ejecutarTrigonometria("cos", "Coseno");
     }//GEN-LAST:event_jBtn12ActionPerformed
 
     private void jBtn13ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jBtn13ActionPerformed
-        // TODO add your handling code here:
+        ejecutarTrigonometria("tan", "Tangente");
     }//GEN-LAST:event_jBtn13ActionPerformed
 
     private void jBtn14ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jBtn14ActionPerformed
-        // TODO add your handling code here:
+        ejecutarTrigonometria("asin", "Arcoseno");
     }//GEN-LAST:event_jBtn14ActionPerformed
 
     private void jBtn15ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jBtn15ActionPerformed
-        // TODO add your handling code here:
+        ejecutarTrigonometria("acos", "Arcocoseno");
     }//GEN-LAST:event_jBtn15ActionPerformed
 
     private void jBtn16ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jBtn16ActionPerformed
-        // TODO add your handling code here:
+        ejecutarTrigonometria("atan", "Arcotangente");
     }//GEN-LAST:event_jBtn16ActionPerformed
 
     private void jBtn17ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jBtn17ActionPerformed
-        // TODO add your handling code here:
+        if (modoActual.equals("grados")) {
+            modoActual = "radianes";
+            jBtn17.setText("RAD");
+        } else {
+            modoActual = "grados";
+            jBtn17.setText("DEG");
+        }
     }//GEN-LAST:event_jBtn17ActionPerformed
+
+    private void jBtn18ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jBtn18ActionPerformed
+try {
+            com.calculadora.dao.OperacionDAO opDAO = new com.calculadora.dao.OperacionDAOImpl();
+
+            // 1. Filtrar únicamente las operaciones de tipo TRIGONOMETRICA desde SQLite
+            java.util.List<com.calculadora.dto.OperacionDTO> opsTrig = opDAO.listarOperaciones()
+                    .stream()
+                    .filter(op -> "TRIGONOMETRICA".equalsIgnoreCase(op.getTipo()))
+                    .collect(java.util.stream.Collectors.toList());
+
+            if (opsTrig.isEmpty()) {
+                javax.swing.JOptionPane.showMessageDialog(this, "No hay funciones trigonométricas registradas en la base de datos.", "Error", javax.swing.JOptionPane.ERROR_MESSAGE);
+                return;
+            }
+
+            // Si no hay una función seleccionada previamente, solicitar al usuario que elija una
+            if (funcionActual == null || funcionActual.trim().isEmpty()) {
+                String[] simbolosTrig = opsTrig.stream().map(com.calculadora.dto.OperacionDTO::getSimbolo).toArray(String[]::new);
+                
+                String seleccion = (String) javax.swing.JOptionPane.showInputDialog(
+                    this,
+                    "Seleccione la función trigonométrica a graficar:",
+                    "Funciones Trigonométricas",
+                    javax.swing.JOptionPane.QUESTION_MESSAGE,
+                    null,
+                    simbolosTrig,
+                    simbolosTrig[0]
+                );
+
+                if (seleccion == null) return;
+                funcionActual = seleccion;
+            }
+
+            // 2. Obtener DTO de la operación
+            com.calculadora.dto.OperacionDTO opDTO = opDAO.buscarPorSimbolo(funcionActual);
+
+            if (opDTO == null || !"TRIGONOMETRICA".equalsIgnoreCase(opDTO.getTipo())) {
+                javax.swing.JOptionPane.showMessageDialog(this, "Solo se pueden graficar funciones TRIGONOMÉTRICAS.", "Operación no permitida", javax.swing.JOptionPane.WARNING_MESSAGE);
+                funcionActual = "";
+                return;
+            }
+
+            // 3. Solicitar parámetros del rango (X min, X max y paso)
+            String strMin = javax.swing.JOptionPane.showInputDialog(this, "Límite inferior (X min) para " + funcionActual + ":", "-360");
+            if (strMin == null || strMin.trim().isEmpty()) return;
+
+            String strMax = javax.swing.JOptionPane.showInputDialog(this, "Límite superior (X max) para " + funcionActual + ":", "360");
+            if (strMax == null || strMax.trim().isEmpty()) return;
+
+            String strPaso = javax.swing.JOptionPane.showInputDialog(this, "Tamaño de paso (Step):", "5");
+            if (strPaso == null || strPaso.trim().isEmpty()) return;
+
+            double xmin = Double.parseDouble(strMin.trim());
+            double xmax = Double.parseDouble(strMax.trim());
+            double paso = Double.parseDouble(strPaso.trim());
+
+            // --- VALIDACIÓN DE RANGOS ANTES DE ENVIAR AL SERVICIO ---
+            if (xmin >= xmax) {
+                javax.swing.JOptionPane.showMessageDialog(this, "El límite inferior (X min: " + xmin + ") debe ser MENOR que el límite superior (X max: " + xmax + ").", "Error en rangos", javax.swing.JOptionPane.WARNING_MESSAGE);
+                return;
+            }
+
+            if (paso <= 0) {
+                javax.swing.JOptionPane.showMessageDialog(this, "El tamaño del paso debe ser un número positivo mayor que 0.", "Error en paso", javax.swing.JOptionPane.WARNING_MESSAGE);
+                return;
+            }
+
+            int idOperacion = opDTO.getId();
+            String nombreSerie = funcionActual + " (" + xmin + " a " + xmax + ")";
+            
+            // Definir y crear el directorio para las gráficas
+            java.io.File directorioGraficas = new java.io.File("../graficas");
+            if (!directorioGraficas.exists()) {
+                directorioGraficas.mkdirs();
+            }
+            java.io.File archivoPNG = new java.io.File(directorioGraficas, "grafica_" + funcionActual + "_" + System.currentTimeMillis() + ".png");
+            String rutaPNG = archivoPNG.getCanonicalPath();
+
+            // 4. Generar la serie en la base de datos
+            int serieId = serieService.generarSerie(idOperacion, funcionActual, nombreSerie, xmin, xmax, paso, modoActual);
+
+            // 5. Crear el gráfico PNG con Python
+            boolean exitoGrafica = serieService.generarGrafica(serieId, rutaPNG);
+
+            // 6. Abrir la imagen PNG automáticamente
+            if (exitoGrafica && archivoPNG.exists()) {
+                if (java.awt.Desktop.isDesktopSupported()) {
+                    java.awt.Desktop.getDesktop().open(archivoPNG);
+                } else {
+                    javax.swing.JOptionPane.showMessageDialog(this, "Gráfica generada exitosamente en:\n" + rutaPNG, "Éxito", javax.swing.JOptionPane.INFORMATION_MESSAGE);
+                }
+            } else {
+                javax.swing.JOptionPane.showMessageDialog(this, "No se pudo generar el archivo PNG de la gráfica.", "Error de Generación", javax.swing.JOptionPane.ERROR_MESSAGE);
+            }
+
+        } catch (NumberFormatException e) {
+            javax.swing.JOptionPane.showMessageDialog(this, "Por favor introduzca valores numéricos válidos (ejemplo: -360, 360, 5).", "Error de Entrada", javax.swing.JOptionPane.ERROR_MESSAGE);
+        } catch (Exception ex) {
+            javax.swing.JOptionPane.showMessageDialog(this, "Error al generar la gráfica: " + ex.getMessage(), "Error", javax.swing.JOptionPane.ERROR_MESSAGE);
+        }
+    }//GEN-LAST:event_jBtn18ActionPerformed
 
     /**
      * @param args the command line arguments
@@ -820,6 +985,7 @@ try {
     private javax.swing.JButton jBtn15;
     private javax.swing.JButton jBtn16;
     private javax.swing.JButton jBtn17;
+    private javax.swing.JButton jBtn18;
     private javax.swing.JButton jBtn2;
     private javax.swing.JButton jBtn3;
     private javax.swing.JButton jBtn4;
