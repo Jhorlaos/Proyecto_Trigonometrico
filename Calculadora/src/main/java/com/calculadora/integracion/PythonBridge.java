@@ -12,9 +12,6 @@ public class PythonBridge {
     private final String rutaTrig = "../python_scripts/Trig.py";
     private final String rutaGraficar = "../python_scripts/Graficar.py";
 
-    /**
-     * Realiza un cálculo puntual (ej. sin(30)) ejecutando Trig.py
-     */
     public String calcularTrig(String funcion, double valor, String modo) throws Exception {
         ProcessBuilder pb = new ProcessBuilder(
             pythonExecutable, 

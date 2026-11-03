@@ -720,12 +720,12 @@ try {
     }//GEN-LAST:event_jBtnDivisionActionPerformed
 
     private void jBtn10ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jBtn10ActionPerformed
-                               
 try {
-            // 1. Obtenemos el historial cruzando estrictamente por la Capa de Servicio
+            // 1. Obtenemos el historial y la lista de operaciones
             java.util.List<com.calculadora.dto.CalculoDTO> historial = servicio.obtenerHistorial();
+            com.calculadora.dao.OperacionDAO opDAO = new com.calculadora.dao.OperacionDAOImpl();
+            java.util.List<com.calculadora.dto.OperacionDTO> listaOperaciones = opDAO.listarOperaciones();
 
-            // 2. Verificamos si la base de datos está vacía
             if (historial.isEmpty()) {
                 javax.swing.JOptionPane.showMessageDialog(this, 
                         "El historial está vacío. Aún no has realizado operaciones.", 
@@ -734,72 +734,135 @@ try {
                 return;
             }
 
-            // 3. Construimos el texto con formato para que se vea ordenado
-            StringBuilder sb = new StringBuilder();
-            sb.append("--- HISTORIAL DE OPERACIONES (SQLite) ---\n\n");
-            
-            for (com.calculadora.dto.CalculoDTO dto : historial) {
-                if (dto.isExito()) {
-                    // Formato para operaciones exitosas
-                    sb.append(String.format("ID: %d | OpA: %.2f | OpB: %s | RESULTADO: %.2f\n", 
-                        dto.getId(), 
-                        dto.getOperandoA(), 
-                        (dto.getOperandoB() != null ? String.format("%.2f", dto.getOperandoB()) : "N/A"), 
-                        dto.getResultado()));
-                } else {
-                    // Formato para operaciones fallidas (ej: División por cero)
-                    sb.append(String.format("ID: %d | OpA: %.2f | FALLÓ: %s\n", 
-                        dto.getId(), 
-                        dto.getOperandoA(), 
-                        dto.getMensajeError()));
-                }
-            }
-
-            // 4. Mostramos el historial en pantalla con opción de seleccionar un resultado
-            javax.swing.JTextArea textArea = new javax.swing.JTextArea(sb.toString());
-            textArea.setEditable(false);
-            javax.swing.JScrollPane scrollPane = new javax.swing.JScrollPane(textArea);
-            scrollPane.setPreferredSize(new java.awt.Dimension(350, 200));
-
-            // Preparamos las opciones exitosas para el selector desplegable
+            // 2. Separar listas de DTOs y modelos para la UI
             java.util.List<com.calculadora.dto.CalculoDTO> exitosos = new java.util.ArrayList<>();
-            
-            // Usamos un Vector nativo para evitar el conflicto del toArray()
-            java.util.Vector<String> opcionesVector = new java.util.Vector<>();
-            
+            javax.swing.DefaultListModel<String> modeloExitosos = new javax.swing.DefaultListModel<>();
+            javax.swing.DefaultListModel<String> modeloFallidos = new javax.swing.DefaultListModel<>();
+
             for (com.calculadora.dto.CalculoDTO dto : historial) {
-                if (dto.isExito() && dto.getResultado() != null) {
+                
+                // 3. Buscar el símbolo de la operación usando el operacionId
+                String nombreOp = "Op";
+                for (com.calculadora.dto.OperacionDTO op : listaOperaciones) {
+                    if (op.getId() == dto.getOperacionId()) {
+                        nombreOp = op.getSimbolo();
+                        break;
+                    }
+                }
+
+                if (dto.isExito()) {
                     exitosos.add(dto);
-                    opcionesVector.add(String.format("ID %d -> Result: %.2f", dto.getId(), dto.getResultado()));
+                    if (dto.getOperandoB() != null) {
+                        // Formato para operaciones básicas (ej: Suma, Resta)
+                        modeloExitosos.addElement(String.format(" ID: %d  |  [ %s ]  |  %.2f y %.2f  ->  Resultado: %.2f", 
+                                dto.getId(), nombreOp, dto.getOperandoA(), dto.getOperandoB(), dto.getResultado()));
+                    } else {
+                        // Formato para trigonométricas (1 operando)
+                        modeloExitosos.addElement(String.format(" ID: %d  |  [ %s ]  |  %.2f  ->  Resultado: %.2f", 
+                                dto.getId(), nombreOp, dto.getOperandoA(), dto.getResultado()));
+                    }
+                } else {
+                    // Formato para operaciones fallidas
+                    modeloFallidos.addElement(String.format(" ID: %d  |  [ %s ]  |  Falló: %s", 
+                            dto.getId(), nombreOp, dto.getMensajeError()));
                 }
             }
 
-            // Panel contenedor que une el historial y la selección
-            javax.swing.JPanel panel = new javax.swing.JPanel(new java.awt.BorderLayout(0, 10));
-            panel.add(scrollPane, java.awt.BorderLayout.CENTER);
+            // 4. Colores temáticos de la calculadora
+            java.awt.Color fondoGris = new java.awt.Color(50, 50, 50);
+            java.awt.Color textoBlanco = java.awt.Color.WHITE;
+            java.awt.Color seleccionVerde = new java.awt.Color(139, 195, 74); 
 
-            javax.swing.JComboBox<String> comboResultados = null;
-            if (!opcionesVector.isEmpty()) {
-                // Pasamos el Vector directamente al JComboBox, esto resuelve el error de genéricos en NetBeans
-                comboResultados = new javax.swing.JComboBox<>(opcionesVector);
-                
-                javax.swing.JPanel panelBottom = new javax.swing.JPanel(new java.awt.BorderLayout(5, 0));
-                panelBottom.add(new javax.swing.JLabel("Cargar resultado a pantalla:"), java.awt.BorderLayout.WEST);
-                panelBottom.add(comboResultados, java.awt.BorderLayout.CENTER);
-                panel.add(panelBottom, java.awt.BorderLayout.SOUTH);
-            }
+            // 5. Configurar el renderizador visual para darle color a las listas
+            javax.swing.DefaultListCellRenderer cellRenderer = new javax.swing.DefaultListCellRenderer() {
+                @Override
+                public java.awt.Component getListCellRendererComponent(javax.swing.JList<?> list, Object value, int index, boolean isSelected, boolean cellHasFocus) {
+                    java.awt.Component c = super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
+                    if (isSelected) {
+                        c.setBackground(seleccionVerde);
+                        c.setForeground(java.awt.Color.BLACK);
+                    } else {
+                        c.setBackground(fondoGris);
+                        c.setForeground(textoBlanco);
+                    }
+                    c.setFont(new java.awt.Font("Segoe UI", java.awt.Font.BOLD, 13));
+                    return c;
+                }
+            };
 
-            int confirm = javax.swing.JOptionPane.showConfirmDialog(this, panel, "Historial de Cálculos", 
-                    javax.swing.JOptionPane.OK_CANCEL_OPTION, javax.swing.JOptionPane.PLAIN_MESSAGE);
+            // 6. Construir las listas visuales (JList)
+            javax.swing.JList<String> listaExitosos = new javax.swing.JList<>(modeloExitosos);
+            listaExitosos.setCellRenderer(cellRenderer);
+            listaExitosos.setBackground(fondoGris);
+            listaExitosos.setSelectionMode(javax.swing.ListSelectionModel.SINGLE_SELECTION);
 
-            // Si presiona OK y eligió un ítem, lo coloca en la pantalla principal
-            if (confirm == javax.swing.JOptionPane.OK_OPTION && comboResultados != null) {
-                int index = comboResultados.getSelectedIndex();
+            javax.swing.JList<String> listaFallidos = new javax.swing.JList<>(modeloFallidos);
+            listaFallidos.setCellRenderer(cellRenderer);
+            listaFallidos.setBackground(fondoGris);
+            listaFallidos.setSelectionMode(javax.swing.ListSelectionModel.SINGLE_SELECTION); 
+
+            javax.swing.JScrollPane scrollExitosos = new javax.swing.JScrollPane(listaExitosos);
+            scrollExitosos.setPreferredSize(new java.awt.Dimension(500, 250));
+            scrollExitosos.getViewport().setBackground(fondoGris);
+            scrollExitosos.setBorder(javax.swing.BorderFactory.createEmptyBorder(5, 5, 5, 5));
+
+            javax.swing.JScrollPane scrollFallidos = new javax.swing.JScrollPane(listaFallidos);
+            scrollFallidos.setPreferredSize(new java.awt.Dimension(500, 250));
+            scrollFallidos.getViewport().setBackground(fondoGris);
+            scrollFallidos.setBorder(javax.swing.BorderFactory.createEmptyBorder(5, 5, 5, 5));
+
+            // 7. Crear el contenedor con pestañas
+            javax.swing.JTabbedPane tabbedPane = new javax.swing.JTabbedPane();
+            tabbedPane.addTab("Exitosas (Clic para usar)", scrollExitosos);
+            tabbedPane.addTab("Operaciones Fallidas", scrollFallidos);
+
+            // 8. CREACIÓN DEL DIÁLOGO PERSONALIZADO
+            javax.swing.JDialog dialog = new javax.swing.JDialog((java.awt.Frame) javax.swing.SwingUtilities.getWindowAncestor(this), "Historial de Cálculos", true);
+            dialog.setLayout(new java.awt.BorderLayout());
+            
+            javax.swing.JPanel panelBotones = new javax.swing.JPanel();
+            javax.swing.JButton btnOk = new javax.swing.JButton("Cargar Seleccionado");
+            javax.swing.JButton btnCancel = new javax.swing.JButton("Cerrar");
+            panelBotones.add(btnOk);
+            panelBotones.add(btnCancel);
+
+            dialog.add(tabbedPane, java.awt.BorderLayout.CENTER);
+            dialog.add(panelBotones, java.awt.BorderLayout.SOUTH);
+            dialog.pack();
+            dialog.setLocationRelativeTo(this);
+
+            // Lógica para ocultar el botón OK en la pestaña de errores
+            tabbedPane.addChangeListener(e -> {
+                if (tabbedPane.getSelectedIndex() == 1) { // Pestaña Fallidas
+                    btnOk.setVisible(false);
+                } else { // Pestaña Exitosas
+                    btnOk.setVisible(true);
+                }
+            });
+
+            // Arreglo para guardar la respuesta de los botones
+            final boolean[] okPresionado = {false};
+
+            btnOk.addActionListener(e -> {
+                okPresionado[0] = true;
+                dialog.dispose();
+            });
+
+            btnCancel.addActionListener(e -> {
+                dialog.dispose();
+            });
+
+            // Muestra la ventana (se pausa aquí hasta cerrar)
+            dialog.setVisible(true);
+
+            // 9. Cargar el resultado a la pantalla si el usuario aceptó
+            if (okPresionado[0]) {
+                int index = listaExitosos.getSelectedIndex();
                 if (index >= 0) {
                     double valorSeleccionado = exitosos.get(index).getResultado();
                     jTxtDisplay.setText(String.valueOf(valorSeleccionado));
                 }
-            }   
+            }
 
         } catch (Exception ex) {
             javax.swing.JOptionPane.showMessageDialog(this, 
@@ -845,104 +908,106 @@ try {
 
     private void jBtn18ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jBtn18ActionPerformed
 try {
-            com.calculadora.dao.OperacionDAO opDAO = new com.calculadora.dao.OperacionDAOImpl();
+    // 1. Obtenemos el historial cruzando estrictamente por la Capa de Servicio
+    java.util.List<com.calculadora.dto.CalculoDTO> historial = servicio.obtenerHistorial();
 
-            // 1. Filtrar únicamente las operaciones de tipo TRIGONOMETRICA desde SQLite
-            java.util.List<com.calculadora.dto.OperacionDTO> opsTrig = opDAO.listarOperaciones()
-                    .stream()
-                    .filter(op -> "TRIGONOMETRICA".equalsIgnoreCase(op.getTipo()))
-                    .collect(java.util.stream.Collectors.toList());
+    // 2. Verificamos si la base de datos está vacía
+    if (historial.isEmpty()) {
+        javax.swing.JOptionPane.showMessageDialog(this, 
+                "El historial está vacío. Aún no has realizado operaciones.", 
+                "Historial de Cálculos", 
+                javax.swing.JOptionPane.INFORMATION_MESSAGE);
+        return;
+    }
 
-            if (opsTrig.isEmpty()) {
-                javax.swing.JOptionPane.showMessageDialog(this, "No hay funciones trigonométricas registradas en la base de datos.", "Error", javax.swing.JOptionPane.ERROR_MESSAGE);
-                return;
-            }
+    // 3. Separar listas y construir textos con formato alineado
+    StringBuilder sbExitos = new StringBuilder();
+    StringBuilder sbFallos = new StringBuilder();
+    
+    java.util.List<com.calculadora.dto.CalculoDTO> exitosos = new java.util.ArrayList<>();
+    java.util.Vector<String> opcionesVector = new java.util.Vector<>();
 
-            // Si no hay una función seleccionada previamente, solicitar al usuario que elija una
-            if (funcionActual == null || funcionActual.trim().isEmpty()) {
-                String[] simbolosTrig = opsTrig.stream().map(com.calculadora.dto.OperacionDTO::getSimbolo).toArray(String[]::new);
-                
-                String seleccion = (String) javax.swing.JOptionPane.showInputDialog(
-                    this,
-                    "Seleccione la función trigonométrica a graficar:",
-                    "Funciones Trigonométricas",
-                    javax.swing.JOptionPane.QUESTION_MESSAGE,
-                    null,
-                    simbolosTrig,
-                    simbolosTrig[0]
-                );
-
-                if (seleccion == null) return;
-                funcionActual = seleccion;
-            }
-
-            // 2. Obtener DTO de la operación
-            com.calculadora.dto.OperacionDTO opDTO = opDAO.buscarPorSimbolo(funcionActual);
-
-            if (opDTO == null || !"TRIGONOMETRICA".equalsIgnoreCase(opDTO.getTipo())) {
-                javax.swing.JOptionPane.showMessageDialog(this, "Solo se pueden graficar funciones TRIGONOMÉTRICAS.", "Operación no permitida", javax.swing.JOptionPane.WARNING_MESSAGE);
-                funcionActual = "";
-                return;
-            }
-
-            // 3. Solicitar parámetros del rango (X min, X max y paso)
-            String strMin = javax.swing.JOptionPane.showInputDialog(this, "Límite inferior (X min) para " + funcionActual + ":", "-360");
-            if (strMin == null || strMin.trim().isEmpty()) return;
-
-            String strMax = javax.swing.JOptionPane.showInputDialog(this, "Límite superior (X max) para " + funcionActual + ":", "360");
-            if (strMax == null || strMax.trim().isEmpty()) return;
-
-            String strPaso = javax.swing.JOptionPane.showInputDialog(this, "Tamaño de paso (Step):", "5");
-            if (strPaso == null || strPaso.trim().isEmpty()) return;
-
-            double xmin = Double.parseDouble(strMin.trim());
-            double xmax = Double.parseDouble(strMax.trim());
-            double paso = Double.parseDouble(strPaso.trim());
-
-            // --- VALIDACIÓN DE RANGOS ANTES DE ENVIAR AL SERVICIO ---
-            if (xmin >= xmax) {
-                javax.swing.JOptionPane.showMessageDialog(this, "El límite inferior (X min: " + xmin + ") debe ser MENOR que el límite superior (X max: " + xmax + ").", "Error en rangos", javax.swing.JOptionPane.WARNING_MESSAGE);
-                return;
-            }
-
-            if (paso <= 0) {
-                javax.swing.JOptionPane.showMessageDialog(this, "El tamaño del paso debe ser un número positivo mayor que 0.", "Error en paso", javax.swing.JOptionPane.WARNING_MESSAGE);
-                return;
-            }
-
-            int idOperacion = opDTO.getId();
-            String nombreSerie = funcionActual + " (" + xmin + " a " + xmax + ")";
+    for (com.calculadora.dto.CalculoDTO dto : historial) {
+        if (dto.isExito()) {
+            exitosos.add(dto);
+            // Uso de %-X para alinear columnas
+            sbExitos.append(String.format("ID: %-3d | OpA: %-8.2f | OpB: %-8s | RES: %.2f\n", 
+                dto.getId(), 
+                dto.getOperandoA(), 
+                (dto.getOperandoB() != null ? String.format("%.2f", dto.getOperandoB()) : "N/A"), 
+                dto.getResultado()));
             
-            // Definir y crear el directorio para las gráficas
-            java.io.File directorioGraficas = new java.io.File("../graficas");
-            if (!directorioGraficas.exists()) {
-                directorioGraficas.mkdirs();
+            if (dto.getResultado() != null) {
+                opcionesVector.add(String.format("ID %d -> Result: %.2f", dto.getId(), dto.getResultado()));
             }
-            java.io.File archivoPNG = new java.io.File(directorioGraficas, "grafica_" + funcionActual + "_" + System.currentTimeMillis() + ".png");
-            String rutaPNG = archivoPNG.getCanonicalPath();
-
-            // 4. Generar la serie en la base de datos
-            int serieId = serieService.generarSerie(idOperacion, funcionActual, nombreSerie, xmin, xmax, paso, modoActual);
-
-            // 5. Crear el gráfico PNG con Python
-            boolean exitoGrafica = serieService.generarGrafica(serieId, rutaPNG);
-
-            // 6. Abrir la imagen PNG automáticamente
-            if (exitoGrafica && archivoPNG.exists()) {
-                if (java.awt.Desktop.isDesktopSupported()) {
-                    java.awt.Desktop.getDesktop().open(archivoPNG);
-                } else {
-                    javax.swing.JOptionPane.showMessageDialog(this, "Gráfica generada exitosamente en:\n" + rutaPNG, "Éxito", javax.swing.JOptionPane.INFORMATION_MESSAGE);
-                }
-            } else {
-                javax.swing.JOptionPane.showMessageDialog(this, "No se pudo generar el archivo PNG de la gráfica.", "Error de Generación", javax.swing.JOptionPane.ERROR_MESSAGE);
-            }
-
-        } catch (NumberFormatException e) {
-            javax.swing.JOptionPane.showMessageDialog(this, "Por favor introduzca valores numéricos válidos (ejemplo: -360, 360, 5).", "Error de Entrada", javax.swing.JOptionPane.ERROR_MESSAGE);
-        } catch (Exception ex) {
-            javax.swing.JOptionPane.showMessageDialog(this, "Error al generar la gráfica: " + ex.getMessage(), "Error", javax.swing.JOptionPane.ERROR_MESSAGE);
+        } else {
+            sbFallos.append(String.format("ID: %-3d | OpA: %-8.2f | FALLÓ: %s\n", 
+                dto.getId(), 
+                dto.getOperandoA(), 
+                dto.getMensajeError()));
         }
+    }
+
+    // 4. Configuración visual de las áreas de texto (Fuente para alinear y márgenes)
+    java.awt.Font fuenteMono = new java.awt.Font("Monospaced", java.awt.Font.PLAIN, 13);
+
+    javax.swing.JTextArea txtExitos = new javax.swing.JTextArea(sbExitos.length() > 0 ? sbExitos.toString() : "No hay operaciones exitosas registradas.");
+    txtExitos.setEditable(false);
+    txtExitos.setFont(fuenteMono);
+    txtExitos.setMargin(new java.awt.Insets(10, 10, 10, 10));
+    javax.swing.JScrollPane scrollExitos = new javax.swing.JScrollPane(txtExitos);
+
+    javax.swing.JTextArea txtFallos = new javax.swing.JTextArea(sbFallos.length() > 0 ? sbFallos.toString() : "No hay operaciones fallidas registradas.");
+    txtFallos.setEditable(false);
+    txtFallos.setFont(fuenteMono);
+    txtFallos.setForeground(new java.awt.Color(180, 0, 0)); // Rojo oscuro para los errores
+    txtFallos.setMargin(new java.awt.Insets(10, 10, 10, 10));
+    javax.swing.JScrollPane scrollFallos = new javax.swing.JScrollPane(txtFallos);
+
+    // 5. Crear el sistema de pestañas (Tabs)
+    javax.swing.JTabbedPane tabbedPane = new javax.swing.JTabbedPane();
+    tabbedPane.addTab("✅ Operaciones Exitosas", scrollExitos);
+    tabbedPane.addTab("❌ Operaciones Fallidas", scrollFallos);
+    tabbedPane.setPreferredSize(new java.awt.Dimension(500, 250));
+
+    // 6. Panel principal contenedor
+    javax.swing.JPanel panelPrincipal = new javax.swing.JPanel(new java.awt.BorderLayout(0, 15));
+    panelPrincipal.add(tabbedPane, java.awt.BorderLayout.CENTER);
+
+    // 7. Panel inferior para selección de resultados
+    javax.swing.JComboBox<String> comboResultados = null;
+    if (!opcionesVector.isEmpty()) {
+        comboResultados = new javax.swing.JComboBox<>(opcionesVector);
+        
+        javax.swing.JPanel panelBottom = new javax.swing.JPanel(new java.awt.BorderLayout(10, 0));
+        panelBottom.add(new javax.swing.JLabel("Seleccionar para cargar en pantalla:"), java.awt.BorderLayout.WEST);
+        panelBottom.add(comboResultados, java.awt.BorderLayout.CENTER);
+        panelBottom.setBorder(javax.swing.BorderFactory.createEmptyBorder(5, 5, 5, 5));
+        
+        panelPrincipal.add(panelBottom, java.awt.BorderLayout.SOUTH);
+    }
+
+    // 8. Mostrar el cuadro de diálogo
+    int confirm = javax.swing.JOptionPane.showConfirmDialog(this, panelPrincipal, 
+            "Historial de Cálculos", 
+            javax.swing.JOptionPane.OK_CANCEL_OPTION, 
+            javax.swing.JOptionPane.PLAIN_MESSAGE);
+
+    // 9. Si presiona OK y eligió un ítem, lo coloca en la pantalla principal
+    if (confirm == javax.swing.JOptionPane.OK_OPTION && comboResultados != null) {
+        int index = comboResultados.getSelectedIndex();
+        if (index >= 0) {
+            double valorSeleccionado = exitosos.get(index).getResultado();
+            jTxtDisplay.setText(String.valueOf(valorSeleccionado));
+        }
+    }   
+
+} catch (Exception ex) {
+    javax.swing.JOptionPane.showMessageDialog(this, 
+            "Error al consultar el historial: " + ex.getMessage(), 
+            "Error", 
+            javax.swing.JOptionPane.ERROR_MESSAGE);
+}
     }//GEN-LAST:event_jBtn18ActionPerformed
 
     /**
