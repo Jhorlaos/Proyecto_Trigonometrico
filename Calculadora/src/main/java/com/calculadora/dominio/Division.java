@@ -15,7 +15,7 @@ public class Division extends OperacionBasica{
     @Override
     public double calcular(double[] operandos) {
             if(operandos[1]==0){
-            throw new DivisionPorCeroException("No se puede dividir por cero!!!!");
+            throw new DivisionPorCeroException("No se puede dividir entre cero!!!!");
             }
         return operandos[0] / operandos[1];
     }
