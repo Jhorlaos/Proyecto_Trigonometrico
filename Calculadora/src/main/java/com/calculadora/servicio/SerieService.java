@@ -5,6 +5,10 @@ import java.util.List;
 
 public interface SerieService {
 
+    int generarSerie(String funcion, double xmin, double xmax, double paso, String modo) throws Exception;
+
+    boolean tienePuntosIndefinidos(int serieId);
+
     boolean validarParametros(double xmin, double xmax, double paso);
 
     int generarSerie(int operacionId, String funcion, String nombre, double xmin, double xmax, double paso, String modo) throws Exception;

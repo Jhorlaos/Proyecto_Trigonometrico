@@ -1,11 +1,16 @@
 import sys
+import math
 import sqlite3
+import matplotlib
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 def generar_grafica(db_path, serie_id, ruta_salida_png):
+    conn = None
     try:
         # 1. Conexión a la base de datos SQLite
-        conn = sqlite3.connect(db_path)
+        from pathlib import Path
+        conn = sqlite3.connect(Path(db_path).resolve().as_uri() + "?mode=ro", uri=True)
         cursor = conn.cursor()
 
         # 2. Obtener el nombre de la serie para el título
@@ -28,7 +33,15 @@ def generar_grafica(db_path, serie_id, ruta_salida_png):
         x_vals = []
         y_vals = []
 
+        anterior_rad = None
         for x, y in filas:
+            if serie_info and serie_info[0] == "tan":
+                rad = math.radians(x) if serie_info[1] == "grados" else x
+                if anterior_rad is not None and math.floor((anterior_rad + math.pi / 2) / math.pi) != math.floor((rad + math.pi / 2) / math.pi):
+                    # El corte es visual: no se altera el valor matemático guardado.
+                    x_vals.append(x)
+                    y_vals.append(float("nan"))
+                anterior_rad = rad
             x_vals.append(x)
             # Si y es None (NULL en SQLite), matplotlib no dibuja la línea en ese punto
             y_vals.append(y)
@@ -41,8 +54,10 @@ def generar_grafica(db_path, serie_id, ruta_salida_png):
         plt.grid(True, linestyle=":", alpha=0.6)
         
         plt.title(f"Gráfica: {titulo_grafica}", fontsize=12, fontweight="bold")
-        plt.xlabel("Eje X (Ángulo / Valor)", fontsize=10)
-        plt.ylabel("Eje Y (Resultado)", fontsize=10)
+        nombre, modo = serie_info if serie_info else ("", "")
+        inversa = nombre in ("asin", "acos", "atan")
+        plt.xlabel("x (valor)" if inversa else f"x (ángulo en {modo})", fontsize=10)
+        plt.ylabel(f"y (ángulo en {modo})" if inversa else "y (resultado)", fontsize=10)
         plt.legend(loc="upper right")
 
         # 5. Guardar la imagen en formato PNG
@@ -53,6 +68,11 @@ def generar_grafica(db_path, serie_id, ruta_salida_png):
 
     except Exception as e:
         print(f"ERROR;Fallo al generar grafica: {str(e)}")
+        sys.exit(1)
+    finally:
+        if conn is not None:
+            conn.close()
+        plt.close("all")
 
 def main():
     args = sys.argv[1:]

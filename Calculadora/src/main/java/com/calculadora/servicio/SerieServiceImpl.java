@@ -22,24 +22,47 @@ public class SerieServiceImpl implements SerieService {
         this.pythonBridge = new PythonBridge();
     }
 
+    public int generarSerie(String funcion, double xmin, double xmax, double paso, String modo) throws Exception {
+        com.calculadora.dto.OperacionDTO operacion = new com.calculadora.dao.OperacionDAOImpl().buscarPorSimbolo(funcion);
+        if (operacion == null) {
+            throw new IllegalArgumentException("La función no está disponible en el catálogo: " + funcion);
+        }
+        return generarSerie(operacion.getId(), funcion, funcion, xmin, xmax, paso, modo);
+    }
+
+    public boolean tienePuntosIndefinidos(int serieId) {
+        return serieDAO.obtenerPuntos(serieId).stream().anyMatch(p -> p.getY() == null);
+    }
+
     @Override
     public boolean validarParametros(double xmin, double xmax, double paso) {
-        return xmin < xmax && paso > 0;
+        double intervalos = (xmax - xmin) / paso;
+        return Double.isFinite(xmin) && Double.isFinite(xmax) && Double.isFinite(paso)
+                && xmin < xmax && paso > 0 && paso <= xmax - xmin
+                && xmin + paso > xmin && xmax - paso < xmax
+                && Double.isFinite(intervalos) && intervalos <= 9999;
     }
 
     @Override
     public int generarSerie(int operacionId, String funcion, String nombre, double xmin, double xmax, double paso, String modo) throws Exception {
         if (!validarParametros(xmin, xmax, paso)) {
-            throw new IllegalArgumentException("Parámetros inválidos: xmin debe ser menor a xmax, y el paso mayor a 0.");
+            throw new IllegalArgumentException("Use números finitos, mínimo menor que máximo y un paso positivo que genere entre 2 y 10000 puntos.");
         }
 
+        if (!java.util.Set.of("sin", "cos", "tan", "asin", "acos", "atan").contains(funcion)
+                || !("grados".equals(modo) || "radianes".equals(modo))) {
+            throw new IllegalArgumentException("Seleccione una función trigonométrica y grados o radianes.");
+        }
+        if (("asin".equals(funcion) || "acos".equals(funcion)) && (xmin < -1 || xmax > 1)) {
+            throw new IllegalArgumentException("El rango de arcoseno y arcocoseno debe estar entre -1 y 1.");
+        }
         // 1. Obtener puntos ejecutando Trig.py a través de PythonBridge
         List<String> lineasSalida = pythonBridge.generarSerie(funcion, xmin, xmax, paso, modo);
         
         // 2. Convertir la respuesta de texto en DTOs
         List<PuntoDTO> puntos = convertirPuntos(lineasSalida);
         
-        if (puntos.isEmpty()) {
+        if (puntos.isEmpty() || puntos.stream().allMatch(p -> p.getY() == null)) {
             throw new Exception("Python no generó ningún punto válido para la serie.");
         }
 
@@ -61,15 +84,24 @@ public class SerieServiceImpl implements SerieService {
     public List<PuntoDTO> convertirPuntos(List<String> lineas) {
         List<PuntoDTO> puntos = new ArrayList<>();
         for (String linea : lineas) {
-            String[] partes = linea.split(";");
-            if (partes.length == 2) {
-                try {
-                    double x = Double.parseDouble(partes[0].trim());
-                    Double y = partes[1].trim().equalsIgnoreCase("None") ? null : Double.parseDouble(partes[1].trim());
-                    puntos.add(new PuntoDTO(x, y));
-                } catch (NumberFormatException e) {
-                    System.err.println("Advertencia: No se pudo parsear la línea: " + linea);
+            String[] partes = linea.split(";", -1);
+            if (partes.length != 2) {
+                throw new IllegalArgumentException("Python devolvió un punto malformado: " + linea);
+            }
+            try {
+                double x = Double.parseDouble(partes[0].trim());
+                String valorY = partes[1].trim();
+                Double y = valorY.isEmpty() || valorY.equalsIgnoreCase("None")
+                        ? null : Double.valueOf(valorY);
+                if (!Double.isFinite(x) || (y != null && !Double.isFinite(y))) {
+                    throw new NumberFormatException("Punto no finito");
                 }
+                if (!puntos.isEmpty() && x <= puntos.get(puntos.size() - 1).getX()) {
+                    throw new NumberFormatException("Los valores de x deben aumentar");
+                }
+                puntos.add(new PuntoDTO(x, y));
+            } catch (NumberFormatException e) {
+                throw new IllegalArgumentException("Python devolvió un punto inválido: " + linea, e);
             }
         }
         return puntos;

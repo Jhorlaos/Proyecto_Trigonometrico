@@ -1,0 +1,46 @@
+{
+  "stage": "C:\\Users\\LENOVO\\.codex\\.chatgpt-projects\\g-p-683d2079f75481918adf310a16ef415d\\revision_calculadora",
+  "project": "C:\\Users\\LENOVO\\OneDrive\\Escritorio\\Proyecto_Trigonometrico",
+  "files": [
+    {
+      "path": "Calculadora/src/main/java/com/calculadora/integracion/PythonBridge.java",
+      "before": "9f3315394326f09ad346d8cf4710fcecc5be04606910ef93cc17de864bd7d957",
+      "after": "fbee3815f89b8564711137d4420daffe753fe23acdf9d556bb8ed5b7fa9e7b2b"
+    },
+    {
+      "path": "Calculadora/src/main/java/com/calculadora/servicio/SerieService.java",
+      "before": "b7abdcfd1db3f18e0f0b918a28730064a39b038faca0cbc277cb4f90512c5490",
+      "after": "ed2e4000127c910eae352fdc3c868b52d6c92cb6b842037571b0ba3887486926"
+    },
+    {
+      "path": "Calculadora/src/main/java/com/calculadora/servicio/SerieServiceImpl.java",
+      "before": "ffb881635370eae8f143325e4d505f969a7db2f44c8f9336fefd412d542c6035",
+      "after": "f23d5eed60fb19618158e4de50e8f528dbfb1bc66916115c0ec406248c4e1284"
+    },
+    {
+      "path": "Calculadora/src/main/java/com/calculadora/ui/Calculator.java",
+      "before": "90697ac1d741191b6f29d928472b5e59f46e55d154f41f7c1106d59cccb8b5b0",
+      "after": "055eca4f9249840c72c15bd47ad460c27d8cbf1b23daefed0c05a53cfd6b32ab"
+    },
+    {
+      "path": "Calculadora/src/main/java/com/calculadora/ui/GraficasDialog.java",
+      "before": null,
+      "after": "ef5c65a9edf98bf2d831630d76e7a3de249f2d3b473a7a946f004d6318428ef6"
+    },
+    {
+      "path": "python_scripts/Graficar.py",
+      "before": "f93f1a3e6793b3cb4532144256133230bb97f4ff911b0d5167a501062ae44731",
+      "after": "ac338fb70b74c56513c537464de0368218e085a803926ae27260d870f4db94a7"
+    },
+    {
+      "path": "python_scripts/Requirements.txt",
+      "before": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "after": "12e3d3c71d6161926b7ce4fac2ca20ff83fc55bc2721c53dd002d084c6c532db"
+    },
+    {
+      "path": "python_scripts/Trig.py",
+      "before": "1f42fa410f5ae1b3b9baa74b39629d9fdd25de3977ff52cb17ce581e22880520",
+      "after": "6944148bf56cc3734cee0713b48fc2fca2a5272fbe35f0664ed9e3058905bb77"
+    }
+  ]
+}

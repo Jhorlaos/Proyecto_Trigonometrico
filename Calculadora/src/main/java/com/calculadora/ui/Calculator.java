@@ -440,10 +440,10 @@ public class Calculator extends javax.swing.JFrame {
                             .addComponent(jBtn16, javax.swing.GroupLayout.DEFAULT_SIZE, 88, Short.MAX_VALUE)
                             .addComponent(jBtn14, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
                             .addComponent(jBtn12, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)))
+                    .addComponent(jBtn18, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
                     .addGroup(jPanel1Layout.createSequentialGroup()
-                        .addComponent(jBtn17, javax.swing.GroupLayout.PREFERRED_SIZE, 73, javax.swing.GroupLayout.PREFERRED_SIZE)
-                        .addGap(0, 0, Short.MAX_VALUE))
-                    .addComponent(jBtn18, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
+                        .addComponent(jBtn17, javax.swing.GroupLayout.PREFERRED_SIZE, 142, javax.swing.GroupLayout.PREFERRED_SIZE)
+                        .addGap(0, 0, Short.MAX_VALUE)))
                 .addContainerGap())
         );
         jPanel1Layout.setVerticalGroup(
@@ -907,107 +907,7 @@ try {
     }//GEN-LAST:event_jBtn17ActionPerformed
 
     private void jBtn18ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jBtn18ActionPerformed
-try {
-    // 1. Obtenemos el historial cruzando estrictamente por la Capa de Servicio
-    java.util.List<com.calculadora.dto.CalculoDTO> historial = servicio.obtenerHistorial();
-
-    // 2. Verificamos si la base de datos está vacía
-    if (historial.isEmpty()) {
-        javax.swing.JOptionPane.showMessageDialog(this, 
-                "El historial está vacío. Aún no has realizado operaciones.", 
-                "Historial de Cálculos", 
-                javax.swing.JOptionPane.INFORMATION_MESSAGE);
-        return;
-    }
-
-    // 3. Separar listas y construir textos con formato alineado
-    StringBuilder sbExitos = new StringBuilder();
-    StringBuilder sbFallos = new StringBuilder();
-    
-    java.util.List<com.calculadora.dto.CalculoDTO> exitosos = new java.util.ArrayList<>();
-    java.util.Vector<String> opcionesVector = new java.util.Vector<>();
-
-    for (com.calculadora.dto.CalculoDTO dto : historial) {
-        if (dto.isExito()) {
-            exitosos.add(dto);
-            // Uso de %-X para alinear columnas
-            sbExitos.append(String.format("ID: %-3d | OpA: %-8.2f | OpB: %-8s | RES: %.2f\n", 
-                dto.getId(), 
-                dto.getOperandoA(), 
-                (dto.getOperandoB() != null ? String.format("%.2f", dto.getOperandoB()) : "N/A"), 
-                dto.getResultado()));
-            
-            if (dto.getResultado() != null) {
-                opcionesVector.add(String.format("ID %d -> Result: %.2f", dto.getId(), dto.getResultado()));
-            }
-        } else {
-            sbFallos.append(String.format("ID: %-3d | OpA: %-8.2f | FALLÓ: %s\n", 
-                dto.getId(), 
-                dto.getOperandoA(), 
-                dto.getMensajeError()));
-        }
-    }
-
-    // 4. Configuración visual de las áreas de texto (Fuente para alinear y márgenes)
-    java.awt.Font fuenteMono = new java.awt.Font("Monospaced", java.awt.Font.PLAIN, 13);
-
-    javax.swing.JTextArea txtExitos = new javax.swing.JTextArea(sbExitos.length() > 0 ? sbExitos.toString() : "No hay operaciones exitosas registradas.");
-    txtExitos.setEditable(false);
-    txtExitos.setFont(fuenteMono);
-    txtExitos.setMargin(new java.awt.Insets(10, 10, 10, 10));
-    javax.swing.JScrollPane scrollExitos = new javax.swing.JScrollPane(txtExitos);
-
-    javax.swing.JTextArea txtFallos = new javax.swing.JTextArea(sbFallos.length() > 0 ? sbFallos.toString() : "No hay operaciones fallidas registradas.");
-    txtFallos.setEditable(false);
-    txtFallos.setFont(fuenteMono);
-    txtFallos.setForeground(new java.awt.Color(180, 0, 0)); // Rojo oscuro para los errores
-    txtFallos.setMargin(new java.awt.Insets(10, 10, 10, 10));
-    javax.swing.JScrollPane scrollFallos = new javax.swing.JScrollPane(txtFallos);
-
-    // 5. Crear el sistema de pestañas (Tabs)
-    javax.swing.JTabbedPane tabbedPane = new javax.swing.JTabbedPane();
-    tabbedPane.addTab("✅ Operaciones Exitosas", scrollExitos);
-    tabbedPane.addTab("❌ Operaciones Fallidas", scrollFallos);
-    tabbedPane.setPreferredSize(new java.awt.Dimension(500, 250));
-
-    // 6. Panel principal contenedor
-    javax.swing.JPanel panelPrincipal = new javax.swing.JPanel(new java.awt.BorderLayout(0, 15));
-    panelPrincipal.add(tabbedPane, java.awt.BorderLayout.CENTER);
-
-    // 7. Panel inferior para selección de resultados
-    javax.swing.JComboBox<String> comboResultados = null;
-    if (!opcionesVector.isEmpty()) {
-        comboResultados = new javax.swing.JComboBox<>(opcionesVector);
-        
-        javax.swing.JPanel panelBottom = new javax.swing.JPanel(new java.awt.BorderLayout(10, 0));
-        panelBottom.add(new javax.swing.JLabel("Seleccionar para cargar en pantalla:"), java.awt.BorderLayout.WEST);
-        panelBottom.add(comboResultados, java.awt.BorderLayout.CENTER);
-        panelBottom.setBorder(javax.swing.BorderFactory.createEmptyBorder(5, 5, 5, 5));
-        
-        panelPrincipal.add(panelBottom, java.awt.BorderLayout.SOUTH);
-    }
-
-    // 8. Mostrar el cuadro de diálogo
-    int confirm = javax.swing.JOptionPane.showConfirmDialog(this, panelPrincipal, 
-            "Historial de Cálculos", 
-            javax.swing.JOptionPane.OK_CANCEL_OPTION, 
-            javax.swing.JOptionPane.PLAIN_MESSAGE);
-
-    // 9. Si presiona OK y eligió un ítem, lo coloca en la pantalla principal
-    if (confirm == javax.swing.JOptionPane.OK_OPTION && comboResultados != null) {
-        int index = comboResultados.getSelectedIndex();
-        if (index >= 0) {
-            double valorSeleccionado = exitosos.get(index).getResultado();
-            jTxtDisplay.setText(String.valueOf(valorSeleccionado));
-        }
-    }   
-
-} catch (Exception ex) {
-    javax.swing.JOptionPane.showMessageDialog(this, 
-            "Error al consultar el historial: " + ex.getMessage(), 
-            "Error", 
-            javax.swing.JOptionPane.ERROR_MESSAGE);
-}
+        new GraficasDialog(this, funcionActual, modoActual).setVisible(true);
     }//GEN-LAST:event_jBtn18ActionPerformed
 
     /**

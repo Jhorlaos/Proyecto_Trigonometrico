@@ -10,6 +10,10 @@ def limpiar_flotante(val):
     return val
 
 def calcular_trig(fn, valor, modo="grados"):
+    if not math.isfinite(valor):
+        return "ERROR;Ingrese un número finito"
+    if modo not in ("grados", "radianes"):
+        return "ERROR;Modo de ángulo inválido"
     # Convertir a radianes si la entrada viene en grados
     if modo == "grados" and fn in ["sin", "cos", "tan"]:
         rad = math.radians(valor)
@@ -53,16 +57,22 @@ def calcular_trig(fn, valor, modo="grados"):
         return f"ERROR;{str(e)}"
 
 def generar_serie(fn, xmin, xmax, paso, modo="grados"):
-    x = xmin
-    while x <= xmax + 1e-9:
+    if fn not in ("sin", "cos", "tan", "asin", "acos", "atan") or modo not in ("grados", "radianes"):
+        raise ValueError("Función o modo no válido")
+    if not all(math.isfinite(v) for v in (xmin, xmax, paso)) or not xmin < xmax or paso <= 0:
+        raise ValueError("Rango o paso no válido")
+    intervalos = (xmax - xmin) / paso
+    if not math.isfinite(intervalos) or not 1 <= intervalos <= 9999 or xmin + paso == xmin or xmax - paso == xmax:
+        raise ValueError("Seleccione un paso que genere entre 2 y 10000 puntos")
+    if fn in ("asin", "acos") and (xmin < -1 or xmax > 1):
+        raise ValueError("El rango de asin y acos debe estar entre -1 y 1")
+    cantidad = math.floor(intervalos + 1e-10) + 1
+    for i in range(cantidad):
+        x = min(xmin + i * paso, xmax)
         resp = calcular_trig(fn, x, modo)
-        if resp.startswith("OK;"):
-            y_val = resp.split(";")[1]
-            print(f"{x};{y_val}")
-        else:
-            # Puntos indefinidos se imprimen con 'y' vacío (ej: 90;)
-            print(f"{x};")
-        x += paso
+        y = resp.split(";", 1)[1] if resp.startswith("OK;") else ""
+        print(f"{x};{y}")
+
 
 def main():
     args = sys.argv[1:]
@@ -95,5 +105,9 @@ def main():
         print(calcular_trig(fn, valor, modo))
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except (ValueError, IndexError, OverflowError) as exc:
+        print(f"ERROR;{exc}")
+        sys.exit(1)
              
