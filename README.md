@@ -2,5 +2,7 @@
 Proyecto académico integrado de POO2 y Bases de Datos. Desarrollo de una calculadora con Java, Python y SQLite, que permite realizar operaciones matemáticas, almacenar el historial de cálculos y generar gráficas de funciones.
 
  **Product Owner**: Esteban Peralta Avendaño
+
  **Scrum Master**: Miguel Angel Vargas Fuentes
+ 
  **Devolopers**: Juan Sebastian Hernandez Ramirez
