@@ -28,9 +28,14 @@ public class Calculator extends javax.swing.JFrame {
     private CalculadoraService servicio;
     
     // --- INTEGRACIÓN Y SERVICIOS ---
-   private com.calculadora.servicio.SerieService serieService = new com.calculadora.servicio.SerieServiceImpl();
     private String modoActual = "grados"; 
+    private boolean esperandoOperando;
+    private boolean resultadoMostrado;
+    private boolean cambioInterno;
+    private String operandoVisual;
     private String funcionActual = "";
+    private final com.calculadora.servicio.GestorGraficas gestorGraficas = new com.calculadora.servicio.GestorGraficas();
+    private com.calculadora.servicio.ParametrosGrafica ultimaGrafica;
     
 
     /**
@@ -38,45 +43,245 @@ public class Calculator extends javax.swing.JFrame {
      */
     public Calculator() {
         initComponents();
-        // Inicializamos el servicio al arrancar la ventana
         servicio = new CalculadoraServiceImpl();
+        expresionVisible.setText("");
+        prepararPantalla();
     }
     
     private void ejecutarTrigonometria(String simbolo, String nombre) {
-        funcionActual = simbolo;
-        jBtn18.setVisible(true); // Hacer visible el botón de graficar
-
         try {
-            double valor = Double.parseDouble(jTxtDisplay.getText());
-            
-            // Crear la operación trigonométrica de dominio
-            com.calculadora.dominio.OperacionTrigonometrica opTrig = 
-                new com.calculadora.dominio.OperacionTrigonometrica(simbolo, nombre);
-            opTrig.setModoAngulo(modoActual);
-
-            // Ejecutar y guardar en la base de datos a través del servicio
-            double res = servicio.ejecutarYGuardar(opTrig, new double[]{valor});
-            jTxtDisplay.setText(String.valueOf(res));
-
-        } catch (NumberFormatException e) {
-            javax.swing.JOptionPane.showMessageDialog(this, "Ingrese un número válido en la pantalla.", "Error de entrada", javax.swing.JOptionPane.ERROR_MESSAGE);
-        } catch (CalculadoraException e) {
-            javax.swing.JOptionPane.showMessageDialog(this, e.getMessage(), "Error en Cálculo / Python", javax.swing.JOptionPane.ERROR_MESSAGE);
-            jTxtDisplay.setText("Error");
+            double valor = leerNumero();
+            var op = new com.calculadora.dominio.OperacionTrigonometrica(simbolo, nombre);
+            op.setModoAngulo(modoActual);
+            double respuesta = servicio.ejecutarYGuardar(op, new double[]{valor});
+            String unidad = simbolo.startsWith("a") ? "" : modoActual.equals("grados") ? "°" : " rad";
+            String detalle = simbolo + "(" + formato(valor) + unidad + ")";
+            esperandoOperando = false;
+            mostrarNumero(formato(respuesta));
+            if (operation != null) {
+                resultadoMostrado = false;
+                operandoVisual = detalle;
+                actualizarExpresion();
+            } else {
+                resultadoMostrado = true;
+                mostrarExpresion(detalle + " =");
+                ayudaPantalla.setText(simbolo.startsWith("a") ? "Resultado en " + modoActual : "Resultado");
+            }
+            funcionActual = simbolo;
+            prepararUltimaGrafica();
+            seleccionarNumero();
+        } catch (NumberFormatException ex) {
+            ayudaPantalla.setText("Escribe un número válido antes de elegir la función.");
+        } catch (CalculadoraException ex) {
+            mostrarError(ex.getMessage());
         }
+    }
+
+    private void prepararUltimaGrafica() {
+        var solicitud = com.calculadora.servicio.ParametrosGrafica.recomendados(funcionActual, modoActual);
+        ultimaGrafica = solicitud;
+        jBtn18.setText("Graficar");
+        jBtn18.setToolTipText("Preparando " + funcionActual + " en segundo plano…");
+        gestorGraficas.preparar(solicitud).whenComplete((grafica, error) ->
+                javax.swing.SwingUtilities.invokeLater(() -> {
+                    if (!isDisplayable() || !solicitud.equals(ultimaGrafica)) return;
+                    jBtn18.setText(error == null ? "Ver gráfica" : "Graficar");
+                    jBtn18.setToolTipText(error == null
+                            ? "La gráfica de " + solicitud.funcion() + " ya está preparada."
+                            : "No se pudo preparar. Abre Graficar para reintentar.");
+                }));
+    }
+
+    @Override public void dispose() {
+        gestorGraficas.close();
+        super.dispose();
     }
 
     private void agregarDigito(String digito) {
-        String textoActual = jTxtDisplay.getText();
-        
-        // Si la pantalla dice "Error" o es sólo "0", borra el texto y coloca el nuevo número
-        if (textoActual.equals("Error") || textoActual.equals("0")) {
-            jTxtDisplay.setText(digito);
+        prepararEntrada();
+        String texto = jTxtDisplay.getText();
+        mostrarNumero(texto.equals("0") ? digito : texto.equals("-0") ? "-" + digito : texto + digito);
+        actualizarExpresion();
+    }
+
+    private void prepararPantalla() {
+        EstiloCalculadora.aplicar(panelPrincipal);
+        jBtn18.putClientProperty("accionGrafica", true);
+        expresionVisible.setFocusable(false);
+        expresionVisible.getAccessibleContext().setAccessibleName("Operación completa");
+        jTxtDisplay.getAccessibleContext().setAccessibleName("Número actual o resultado");
+        jTxtDisplay.setToolTipText("Enter calcula el resultado. La operación completa se muestra arriba.");
+        jBtn10.setToolTipText("Consultar y recuperar cálculos anteriores");
+        jBtn11.setToolTipText("Seno"); jBtn12.setToolTipText("Coseno"); jBtn13.setToolTipText("Tangente");
+        jBtn14.setToolTipText("Arcoseno"); jBtn15.setToolTipText("Arcocoseno"); jBtn16.setToolTipText("Arcotangente");
+        javax.swing.ButtonGroup unidades = new javax.swing.ButtonGroup();
+        unidades.add(jBtn17); unidades.add(jBtnRadianes);
+        cambiarModo("grados");
+        jTxtDisplay.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
+            public void insertUpdate(javax.swing.event.DocumentEvent e) { entradaManual(); }
+            public void removeUpdate(javax.swing.event.DocumentEvent e) { entradaManual(); }
+            public void changedUpdate(javax.swing.event.DocumentEvent e) { entradaManual(); }
+        });
+        limpiarPantalla();
+        setMinimumSize(new java.awt.Dimension(740, 690));
+        pack();
+    }
+
+    private void cambiarModo(String modo) {
+        modoActual = modo;
+        boolean grados = "grados".equals(modo);
+        jBtn17.setSelected(grados);
+        jBtnRadianes.setSelected(!grados);
+        estadoModo.setText(grados ? "Grados activo" : "Radianes activo");
+    }
+
+    private void entradaManual() {
+        if (cambioInterno) return;
+        esperandoOperando = false;
+        resultadoMostrado = false;
+        operandoVisual = null;
+        actualizarExpresion();
+    }
+
+    private void mostrarNumero(String texto) {
+        cambioInterno = true;
+        try { jTxtDisplay.setText(texto); }
+        finally { cambioInterno = false; }
+    }
+
+    private void mostrarExpresion(String texto) {
+        expresionVisible.setText(texto);
+        expresionVisible.setToolTipText(texto);
+        expresionVisible.setCaretPosition(texto.length());
+    }
+
+    private static String signo(String operador) {
+        return switch (operador) { case "*" -> "×"; case "/" -> "÷"; case "-" -> "−"; default -> operador; };
+    }
+
+    private static String formato(double numero) {
+        if (!Double.isFinite(numero)) return String.valueOf(numero);
+        if (numero != 0 && (Math.abs(numero) >= 1e15 || Math.abs(numero) < 1e-8)) return Double.toString(numero);
+        return java.math.BigDecimal.valueOf(numero).stripTrailingZeros().toPlainString();
+    }
+
+    private double leerNumero() {
+        double numero = Double.parseDouble(jTxtDisplay.getText().trim());
+        if (!Double.isFinite(numero)) throw new NumberFormatException("Número no finito");
+        return numero;
+    }
+
+    private void seleccionarNumero() {
+        jTxtDisplay.selectAll();
+        jTxtDisplay.requestFocusInWindow();
+    }
+
+    private void prepararEntrada() {
+        if (esperandoOperando || resultadoMostrado || jTxtDisplay.getText().equals("Error") || jTxtDisplay.getText().isBlank()) {
+            mostrarNumero("");
+        }
+        esperandoOperando = false;
+        resultadoMostrado = false;
+        operandoVisual = null;
+    }
+
+    private void actualizarExpresion() {
+        if (operation != null) {
+            String segundo = esperandoOperando ? "" : operandoVisual != null ? operandoVisual : jTxtDisplay.getText();
+            if (segundo.startsWith("-")) segundo = "(" + segundo + ")";
+            mostrarExpresion(formato(firstNum) + " " + signo(operation) + (segundo.isEmpty() ? "" : " " + segundo));
+            ayudaPantalla.setText(esperandoOperando ? "Escribe el segundo número" : "Pulsa = para calcular");
         } else {
-            jTxtDisplay.setText(textoActual + digito);
+            mostrarExpresion(jTxtDisplay.getText());
+            ayudaPantalla.setText("Elige una operación");
         }
     }
-    
+
+    private void limpiarPantalla() {
+        firstNum = secondNum = result = 0;
+        operation = null;
+        esperandoOperando = resultadoMostrado = false;
+        operandoVisual = null;
+        mostrarNumero("");
+        mostrarExpresion(" ");
+        ayudaPantalla.setText("Escribe un número para comenzar");
+    }
+
+    private void seleccionarOperacion(String operador) {
+        try {
+            if (operation != null && !esperandoOperando) {
+                if (!resolverOperacion()) return;
+            }
+            firstNum = leerNumero();
+            operation = operador;
+            esperandoOperando = true;
+            resultadoMostrado = false;
+            operandoVisual = null;
+            actualizarExpresion();
+            seleccionarNumero();
+        } catch (NumberFormatException ex) {
+            ayudaPantalla.setText("Escribe un número válido antes de elegir el signo.");
+        }
+    }
+
+    private boolean resolverOperacion() {
+        if (operation == null) return false;
+        if (esperandoOperando) {
+            ayudaPantalla.setText("Falta el segundo número");
+            return false;
+        }
+        try {
+            secondNum = leerNumero();
+            actualizarExpresion();
+            String expresion = expresionVisible.getText();
+            Operacion op = switch (operation) {
+                case "+" -> new Suma(); case "-" -> new Resta();
+                case "*" -> new Multiplicacion(); case "/" -> new Division();
+                default -> throw new IllegalStateException("Operación desconocida");
+            };
+            result = servicio.ejecutarYGuardar(op, new double[]{firstNum, secondNum});
+            if (!Double.isFinite(result)) {
+                mostrarError("El resultado excede el rango admitido.");
+                return false;
+            }
+            mostrarNumero(formato(result));
+            mostrarExpresion(expresion + " =");
+            ayudaPantalla.setText("Resultado · escribe para comenzar otro cálculo");
+            operation = null;
+            esperandoOperando = false;
+            resultadoMostrado = true;
+            operandoVisual = null;
+            seleccionarNumero();
+            return true;
+        } catch (NumberFormatException ex) {
+            ayudaPantalla.setText("Revisa el número escrito antes de pulsar =");
+        } catch (CalculadoraException ex) {
+            mostrarError(ex.getMessage());
+        }
+        return false;
+    }
+
+    private void mostrarError(String mensaje) {
+        mostrarNumero("Error");
+        ayudaPantalla.setText(mensaje.length() > 85 ? mensaje.substring(0, 82) + "…" : mensaje);
+        ayudaPantalla.setToolTipText(mensaje);
+        operation = null;
+        esperandoOperando = false;
+        resultadoMostrado = true;
+        operandoVisual = null;
+        seleccionarNumero();
+    }
+
+    private void cargarDesdeHistorial(double numero) {
+        mostrarNumero(formato(numero));
+        esperandoOperando = false;
+        resultadoMostrado = operation == null;
+        operandoVisual = null;
+        actualizarExpresion();
+        if (operation == null) ayudaPantalla.setText("Resultado recuperado del historial");
+        seleccionarNumero();
+    }
+
     /**
      * This method is called from within the constructor to initialize the form.
      * WARNING: Do NOT modify this code. The content of this method is always
@@ -85,494 +290,538 @@ public class Calculator extends javax.swing.JFrame {
     @SuppressWarnings("unchecked")
     // <editor-fold defaultstate="collapsed" desc="Generated Code">//GEN-BEGIN:initComponents
     private void initComponents() {
+        java.awt.GridBagConstraints gridBagConstraints;
 
+        panelPrincipal = new javax.swing.JPanel();
+        panelPantalla = new javax.swing.JPanel();
+        panelExpresion = new javax.swing.JPanel();
+        etiquetaPantalla = new javax.swing.JLabel();
+        expresionVisible = new javax.swing.JTextField();
         jTxtDisplay = new javax.swing.JTextField();
-        jBtn1 = new javax.swing.JButton();
-        jBtn2 = new javax.swing.JButton();
-        jBtn3 = new javax.swing.JButton();
-        jBtn4 = new javax.swing.JButton();
-        jBtn5 = new javax.swing.JButton();
-        jBtn6 = new javax.swing.JButton();
+        ayudaPantalla = new javax.swing.JLabel();
+        panelCuerpo = new javax.swing.JPanel();
+        panelOperaciones = new javax.swing.JPanel();
+        tituloOperaciones = new javax.swing.JLabel();
+        panelTeclado = new javax.swing.JPanel();
+        panelNumeros = new javax.swing.JPanel();
         jBtn7 = new javax.swing.JButton();
         jBtn8 = new javax.swing.JButton();
         jBtn9 = new javax.swing.JButton();
-        jBtn0 = new javax.swing.JButton();
-        jBtnNegativeNum = new javax.swing.JButton();
-        jBtnDot = new javax.swing.JButton();
-        jBtnClear = new javax.swing.JButton();
-        jBtnSum = new javax.swing.JButton();
-        jBtnResult = new javax.swing.JButton();
-        jBtnMinus = new javax.swing.JButton();
-        jBtnMultiplication = new javax.swing.JButton();
         jBtnDivision = new javax.swing.JButton();
-        jBtn10 = new javax.swing.JButton();
+        jBtn4 = new javax.swing.JButton();
+        jBtn5 = new javax.swing.JButton();
+        jBtn6 = new javax.swing.JButton();
+        jBtnMultiplication = new javax.swing.JButton();
+        jBtn1 = new javax.swing.JButton();
+        jBtn2 = new javax.swing.JButton();
+        jBtn3 = new javax.swing.JButton();
+        jBtnMinus = new javax.swing.JButton();
+        jBtnNegativeNum = new javax.swing.JButton();
+        jBtn0 = new javax.swing.JButton();
+        jBtnDot = new javax.swing.JButton();
+        jBtnSum = new javax.swing.JButton();
+        panelResultado = new javax.swing.JPanel();
+        jBtnClear = new javax.swing.JButton();
+        jBtnResult = new javax.swing.JButton();
+        panelFunciones = new javax.swing.JPanel();
+        tituloFunciones = new javax.swing.JLabel();
+        panelCientifico = new javax.swing.JPanel();
         jPanel1 = new javax.swing.JPanel();
         jBtn11 = new javax.swing.JButton();
-        jBtn12 = new javax.swing.JButton();
-        jBtn13 = new javax.swing.JButton();
         jBtn14 = new javax.swing.JButton();
+        jBtn12 = new javax.swing.JButton();
         jBtn15 = new javax.swing.JButton();
+        jBtn13 = new javax.swing.JButton();
         jBtn16 = new javax.swing.JButton();
-        jBtn17 = new javax.swing.JButton();
+        panelUnidad = new javax.swing.JPanel();
+        tituloUnidad = new javax.swing.JLabel();
+        panelSelector = new javax.swing.JPanel();
+        jBtn17 = new javax.swing.JToggleButton();
+        jBtnRadianes = new javax.swing.JToggleButton();
+        estadoModo = new javax.swing.JLabel();
+        panelAcciones = new javax.swing.JPanel();
+        jBtn10 = new javax.swing.JButton();
         jBtn18 = new javax.swing.JButton();
 
         setDefaultCloseOperation(javax.swing.WindowConstants.EXIT_ON_CLOSE);
+        setTitle("Calculadora científica");
 
-        jTxtDisplay.setFont(new java.awt.Font("Lucida Grande", 0, 36)); // NOI18N
+        panelPrincipal.setBackground(new java.awt.Color(37, 41, 45));
+        panelPrincipal.setForeground(new java.awt.Color(242, 244, 245));
+        panelPrincipal.setPreferredSize(new java.awt.Dimension(760, 700));
+        panelPrincipal.setBorder(javax.swing.BorderFactory.createEmptyBorder(20, 20, 20, 20));
+        panelPrincipal.setLayout(new java.awt.BorderLayout(0, 20));
+
+        panelPantalla.setBackground(new java.awt.Color(29, 33, 36));
+        panelPantalla.setForeground(new java.awt.Color(242, 244, 245));
+        panelPantalla.setPreferredSize(new java.awt.Dimension(710, 158));
+        panelPantalla.setBorder(javax.swing.BorderFactory.createEmptyBorder(16, 18, 12, 18));
+        panelPantalla.setLayout(new java.awt.BorderLayout(0, 8));
+
+        panelExpresion.setBackground(new java.awt.Color(29, 33, 36));
+        panelExpresion.setForeground(new java.awt.Color(242, 244, 245));
+        panelExpresion.setLayout(new java.awt.BorderLayout(10, 0));
+
+        etiquetaPantalla.setBackground(new java.awt.Color(29, 33, 36));
+        etiquetaPantalla.setForeground(new java.awt.Color(188, 196, 202));
+        etiquetaPantalla.setText("RESULTADO");
+        panelExpresion.add(etiquetaPantalla, java.awt.BorderLayout.WEST);
+
+        expresionVisible.setEditable(false);
+        expresionVisible.setBackground(new java.awt.Color(29, 33, 36));
+        expresionVisible.setFont(new java.awt.Font("Segoe UI", 0, 21)); // NOI18N
+        expresionVisible.setForeground(new java.awt.Color(242, 244, 245));
+        expresionVisible.setHorizontalAlignment(javax.swing.JTextField.RIGHT);
+        expresionVisible.addActionListener(new java.awt.event.ActionListener() {
+            public void actionPerformed(java.awt.event.ActionEvent evt) {
+                expresionVisibleActionPerformed(evt);
+            }
+        });
+        panelExpresion.add(expresionVisible, java.awt.BorderLayout.CENTER);
+
+        panelPantalla.add(panelExpresion, java.awt.BorderLayout.NORTH);
+
+        jTxtDisplay.setBackground(new java.awt.Color(29, 33, 36));
+        jTxtDisplay.setForeground(new java.awt.Color(242, 244, 245));
+        jTxtDisplay.setFont(new java.awt.Font("Segoe UI", 0, 54)); // NOI18N
         jTxtDisplay.setHorizontalAlignment(javax.swing.JTextField.RIGHT);
         jTxtDisplay.addActionListener(new java.awt.event.ActionListener() {
             public void actionPerformed(java.awt.event.ActionEvent evt) {
                 jTxtDisplayActionPerformed(evt);
             }
         });
+        panelPantalla.add(jTxtDisplay, java.awt.BorderLayout.CENTER);
 
-        jBtn1.setBackground(new java.awt.Color(64, 64, 64));
-        jBtn1.setFont(new java.awt.Font("Tahoma", 1, 18)); // NOI18N
-        jBtn1.setForeground(new java.awt.Color(172, 230, 0));
-        jBtn1.setText("1");
-        jBtn1.setAlignmentY(0.0F);
-        jBtn1.addActionListener(new java.awt.event.ActionListener() {
-            public void actionPerformed(java.awt.event.ActionEvent evt) {
-                jBtn1ActionPerformed(evt);
-            }
-        });
+        ayudaPantalla.setBackground(new java.awt.Color(29, 33, 36));
+        ayudaPantalla.setForeground(new java.awt.Color(188, 196, 202));
+        ayudaPantalla.setFont(new java.awt.Font("Segoe UI", 0, 13)); // NOI18N
+        ayudaPantalla.setText("Escribe un número para comenzar");
+        panelPantalla.add(ayudaPantalla, java.awt.BorderLayout.SOUTH);
 
-        jBtn2.setBackground(new java.awt.Color(64, 64, 64));
-        jBtn2.setFont(new java.awt.Font("Tahoma", 1, 18)); // NOI18N
-        jBtn2.setForeground(new java.awt.Color(172, 230, 0));
-        jBtn2.setText("2");
-        jBtn2.setAlignmentY(0.0F);
-        jBtn2.addActionListener(new java.awt.event.ActionListener() {
-            public void actionPerformed(java.awt.event.ActionEvent evt) {
-                jBtn2ActionPerformed(evt);
-            }
-        });
+        panelPrincipal.add(panelPantalla, java.awt.BorderLayout.NORTH);
 
-        jBtn3.setBackground(new java.awt.Color(64, 64, 64));
-        jBtn3.setFont(new java.awt.Font("Tahoma", 1, 18)); // NOI18N
-        jBtn3.setForeground(new java.awt.Color(172, 230, 0));
-        jBtn3.setText("3");
-        jBtn3.setAlignmentY(0.0F);
-        jBtn3.addActionListener(new java.awt.event.ActionListener() {
-            public void actionPerformed(java.awt.event.ActionEvent evt) {
-                jBtn3ActionPerformed(evt);
-            }
-        });
+        panelCuerpo.setBackground(new java.awt.Color(37, 41, 45));
+        panelCuerpo.setForeground(new java.awt.Color(242, 244, 245));
+        panelCuerpo.setLayout(new java.awt.GridBagLayout());
 
-        jBtn4.setBackground(new java.awt.Color(64, 64, 64));
-        jBtn4.setFont(new java.awt.Font("Tahoma", 1, 18)); // NOI18N
-        jBtn4.setForeground(new java.awt.Color(172, 230, 0));
-        jBtn4.setText("4");
-        jBtn4.setAlignmentY(0.0F);
-        jBtn4.addActionListener(new java.awt.event.ActionListener() {
-            public void actionPerformed(java.awt.event.ActionEvent evt) {
-                jBtn4ActionPerformed(evt);
-            }
-        });
+        panelOperaciones.setBackground(new java.awt.Color(37, 41, 45));
+        panelOperaciones.setForeground(new java.awt.Color(242, 244, 245));
+        panelOperaciones.setLayout(new java.awt.BorderLayout(0, 12));
 
-        jBtn5.setBackground(new java.awt.Color(64, 64, 64));
-        jBtn5.setFont(new java.awt.Font("Tahoma", 1, 18)); // NOI18N
-        jBtn5.setForeground(new java.awt.Color(172, 230, 0));
-        jBtn5.setText("5");
-        jBtn5.setAlignmentY(0.0F);
-        jBtn5.addActionListener(new java.awt.event.ActionListener() {
-            public void actionPerformed(java.awt.event.ActionEvent evt) {
-                jBtn5ActionPerformed(evt);
-            }
-        });
+        tituloOperaciones.setBackground(new java.awt.Color(37, 41, 45));
+        tituloOperaciones.setForeground(new java.awt.Color(242, 244, 245));
+        tituloOperaciones.setFont(new java.awt.Font("Segoe UI", 0, 15)); // NOI18N
+        tituloOperaciones.setText("OPERACIONES");
+        panelOperaciones.add(tituloOperaciones, java.awt.BorderLayout.NORTH);
 
-        jBtn6.setBackground(new java.awt.Color(64, 64, 64));
-        jBtn6.setFont(new java.awt.Font("Tahoma", 1, 18)); // NOI18N
-        jBtn6.setForeground(new java.awt.Color(172, 230, 0));
-        jBtn6.setText("6");
-        jBtn6.setAlignmentY(0.0F);
-        jBtn6.addActionListener(new java.awt.event.ActionListener() {
-            public void actionPerformed(java.awt.event.ActionEvent evt) {
-                jBtn6ActionPerformed(evt);
-            }
-        });
+        panelTeclado.setBackground(new java.awt.Color(37, 41, 45));
+        panelTeclado.setForeground(new java.awt.Color(242, 244, 245));
+        panelTeclado.setLayout(new java.awt.BorderLayout(0, 10));
 
-        jBtn7.setBackground(new java.awt.Color(64, 64, 64));
-        jBtn7.setFont(new java.awt.Font("Tahoma", 1, 18)); // NOI18N
-        jBtn7.setForeground(new java.awt.Color(172, 230, 0));
+        panelNumeros.setBackground(new java.awt.Color(37, 41, 45));
+        panelNumeros.setForeground(new java.awt.Color(242, 244, 245));
+        panelNumeros.setLayout(new java.awt.GridLayout(4, 4, 10, 10));
+
+        jBtn7.setBackground(new java.awt.Color(54, 60, 64));
+        jBtn7.setForeground(new java.awt.Color(242, 244, 245));
+        jBtn7.setFont(new java.awt.Font("Segoe UI", 0, 23)); // NOI18N
         jBtn7.setText("7");
-        jBtn7.setAlignmentY(0.0F);
         jBtn7.addActionListener(new java.awt.event.ActionListener() {
             public void actionPerformed(java.awt.event.ActionEvent evt) {
                 jBtn7ActionPerformed(evt);
             }
         });
+        panelNumeros.add(jBtn7);
 
-        jBtn8.setBackground(new java.awt.Color(64, 64, 64));
-        jBtn8.setFont(new java.awt.Font("Tahoma", 1, 18)); // NOI18N
-        jBtn8.setForeground(new java.awt.Color(172, 230, 0));
+        jBtn8.setBackground(new java.awt.Color(54, 60, 64));
+        jBtn8.setForeground(new java.awt.Color(242, 244, 245));
+        jBtn8.setFont(new java.awt.Font("Segoe UI", 0, 23)); // NOI18N
         jBtn8.setText("8");
-        jBtn8.setAlignmentY(0.0F);
         jBtn8.addActionListener(new java.awt.event.ActionListener() {
             public void actionPerformed(java.awt.event.ActionEvent evt) {
                 jBtn8ActionPerformed(evt);
             }
         });
+        panelNumeros.add(jBtn8);
 
-        jBtn9.setBackground(new java.awt.Color(64, 64, 64));
-        jBtn9.setFont(new java.awt.Font("Tahoma", 1, 18)); // NOI18N
-        jBtn9.setForeground(new java.awt.Color(172, 230, 0));
+        jBtn9.setBackground(new java.awt.Color(54, 60, 64));
+        jBtn9.setForeground(new java.awt.Color(242, 244, 245));
+        jBtn9.setFont(new java.awt.Font("Segoe UI", 0, 23)); // NOI18N
         jBtn9.setText("9");
-        jBtn9.setAlignmentY(0.0F);
         jBtn9.addActionListener(new java.awt.event.ActionListener() {
             public void actionPerformed(java.awt.event.ActionEvent evt) {
                 jBtn9ActionPerformed(evt);
             }
         });
+        panelNumeros.add(jBtn9);
 
-        jBtn0.setBackground(new java.awt.Color(64, 64, 64));
-        jBtn0.setFont(new java.awt.Font("Tahoma", 1, 18)); // NOI18N
-        jBtn0.setForeground(new java.awt.Color(172, 230, 0));
-        jBtn0.setText("0");
-        jBtn0.setAlignmentY(0.0F);
-        jBtn0.addActionListener(new java.awt.event.ActionListener() {
-            public void actionPerformed(java.awt.event.ActionEvent evt) {
-                jBtn0ActionPerformed(evt);
-            }
-        });
-
-        jBtnNegativeNum.setBackground(new java.awt.Color(64, 64, 64));
-        jBtnNegativeNum.setFont(new java.awt.Font("Tahoma", 1, 18)); // NOI18N
-        jBtnNegativeNum.setForeground(new java.awt.Color(0, 172, 230));
-        jBtnNegativeNum.setText("+/-");
-        jBtnNegativeNum.setAlignmentY(0.0F);
-        jBtnNegativeNum.addActionListener(new java.awt.event.ActionListener() {
-            public void actionPerformed(java.awt.event.ActionEvent evt) {
-                jBtnNegativeNumActionPerformed(evt);
-            }
-        });
-
-        jBtnDot.setBackground(new java.awt.Color(64, 64, 64));
-        jBtnDot.setFont(new java.awt.Font("Tahoma", 1, 24)); // NOI18N
-        jBtnDot.setForeground(new java.awt.Color(0, 172, 230));
-        jBtnDot.setText(".");
-        jBtnDot.setAlignmentY(0.0F);
-        jBtnDot.addActionListener(new java.awt.event.ActionListener() {
-            public void actionPerformed(java.awt.event.ActionEvent evt) {
-                jBtnDotActionPerformed(evt);
-            }
-        });
-
-        jBtnClear.setBackground(new java.awt.Color(64, 64, 64));
-        jBtnClear.setFont(new java.awt.Font("Tahoma", 1, 18)); // NOI18N
-        jBtnClear.setForeground(new java.awt.Color(0, 172, 230));
-        jBtnClear.setText("C");
-        jBtnClear.setAlignmentY(0.0F);
-        jBtnClear.addActionListener(new java.awt.event.ActionListener() {
-            public void actionPerformed(java.awt.event.ActionEvent evt) {
-                jBtnClearActionPerformed(evt);
-            }
-        });
-
-        jBtnSum.setBackground(new java.awt.Color(64, 64, 64));
-        jBtnSum.setFont(new java.awt.Font("Tahoma", 1, 24)); // NOI18N
-        jBtnSum.setForeground(new java.awt.Color(255, 51, 51));
-        jBtnSum.setText("+");
-        jBtnSum.setAlignmentY(0.0F);
-        jBtnSum.addActionListener(new java.awt.event.ActionListener() {
-            public void actionPerformed(java.awt.event.ActionEvent evt) {
-                jBtnSumActionPerformed(evt);
-            }
-        });
-
-        jBtnResult.setBackground(new java.awt.Color(64, 64, 64));
-        jBtnResult.setFont(new java.awt.Font("Tahoma", 1, 50)); // NOI18N
-        jBtnResult.setForeground(new java.awt.Color(172, 230, 0));
-        jBtnResult.setText("=");
-        jBtnResult.setAlignmentY(0.0F);
-        jBtnResult.addActionListener(new java.awt.event.ActionListener() {
-            public void actionPerformed(java.awt.event.ActionEvent evt) {
-                jBtnResultActionPerformed(evt);
-            }
-        });
-
-        jBtnMinus.setBackground(new java.awt.Color(64, 64, 64));
-        jBtnMinus.setFont(new java.awt.Font("Tahoma", 1, 36)); // NOI18N
-        jBtnMinus.setForeground(new java.awt.Color(255, 51, 51));
-        jBtnMinus.setText("-");
-        jBtnMinus.setAlignmentY(0.0F);
-        jBtnMinus.addActionListener(new java.awt.event.ActionListener() {
-            public void actionPerformed(java.awt.event.ActionEvent evt) {
-                jBtnMinusActionPerformed(evt);
-            }
-        });
-
-        jBtnMultiplication.setBackground(new java.awt.Color(64, 64, 64));
-        jBtnMultiplication.setFont(new java.awt.Font("Tahoma", 1, 26)); // NOI18N
-        jBtnMultiplication.setForeground(new java.awt.Color(255, 51, 51));
-        jBtnMultiplication.setText("*");
-        jBtnMultiplication.setAlignmentY(0.0F);
-        jBtnMultiplication.addActionListener(new java.awt.event.ActionListener() {
-            public void actionPerformed(java.awt.event.ActionEvent evt) {
-                jBtnMultiplicationActionPerformed(evt);
-            }
-        });
-
-        jBtnDivision.setBackground(new java.awt.Color(64, 64, 64));
-        jBtnDivision.setFont(new java.awt.Font("Tahoma", 1, 24)); // NOI18N
-        jBtnDivision.setForeground(new java.awt.Color(255, 51, 51));
+        jBtnDivision.setBackground(new java.awt.Color(54, 60, 64));
+        jBtnDivision.setForeground(new java.awt.Color(181, 228, 59));
+        jBtnDivision.setFont(new java.awt.Font("Segoe UI", 0, 23)); // NOI18N
         jBtnDivision.setText("÷");
-        jBtnDivision.setAlignmentY(0.0F);
         jBtnDivision.addActionListener(new java.awt.event.ActionListener() {
             public void actionPerformed(java.awt.event.ActionEvent evt) {
                 jBtnDivisionActionPerformed(evt);
             }
         });
+        panelNumeros.add(jBtnDivision);
 
-        jBtn10.setBackground(new java.awt.Color(64, 64, 64));
-        jBtn10.setFont(new java.awt.Font("Tahoma", 1, 18)); // NOI18N
-        jBtn10.setForeground(new java.awt.Color(172, 230, 0));
-        jBtn10.setText("His");
-        jBtn10.setAlignmentY(0.0F);
-        jBtn10.addActionListener(new java.awt.event.ActionListener() {
+        jBtn4.setBackground(new java.awt.Color(54, 60, 64));
+        jBtn4.setForeground(new java.awt.Color(242, 244, 245));
+        jBtn4.setFont(new java.awt.Font("Segoe UI", 0, 23)); // NOI18N
+        jBtn4.setText("4");
+        jBtn4.addActionListener(new java.awt.event.ActionListener() {
             public void actionPerformed(java.awt.event.ActionEvent evt) {
-                jBtn10ActionPerformed(evt);
+                jBtn4ActionPerformed(evt);
             }
         });
+        panelNumeros.add(jBtn4);
 
-        jBtn11.setBackground(new java.awt.Color(64, 64, 64));
-        jBtn11.setFont(new java.awt.Font("Tahoma", 1, 18)); // NOI18N
-        jBtn11.setForeground(new java.awt.Color(172, 230, 0));
+        jBtn5.setBackground(new java.awt.Color(54, 60, 64));
+        jBtn5.setForeground(new java.awt.Color(242, 244, 245));
+        jBtn5.setFont(new java.awt.Font("Segoe UI", 0, 23)); // NOI18N
+        jBtn5.setText("5");
+        jBtn5.addActionListener(new java.awt.event.ActionListener() {
+            public void actionPerformed(java.awt.event.ActionEvent evt) {
+                jBtn5ActionPerformed(evt);
+            }
+        });
+        panelNumeros.add(jBtn5);
+
+        jBtn6.setBackground(new java.awt.Color(54, 60, 64));
+        jBtn6.setForeground(new java.awt.Color(242, 244, 245));
+        jBtn6.setFont(new java.awt.Font("Segoe UI", 0, 23)); // NOI18N
+        jBtn6.setText("6");
+        jBtn6.addActionListener(new java.awt.event.ActionListener() {
+            public void actionPerformed(java.awt.event.ActionEvent evt) {
+                jBtn6ActionPerformed(evt);
+            }
+        });
+        panelNumeros.add(jBtn6);
+
+        jBtnMultiplication.setBackground(new java.awt.Color(54, 60, 64));
+        jBtnMultiplication.setForeground(new java.awt.Color(181, 228, 59));
+        jBtnMultiplication.setFont(new java.awt.Font("Segoe UI", 0, 23)); // NOI18N
+        jBtnMultiplication.setText("×");
+        jBtnMultiplication.addActionListener(new java.awt.event.ActionListener() {
+            public void actionPerformed(java.awt.event.ActionEvent evt) {
+                jBtnMultiplicationActionPerformed(evt);
+            }
+        });
+        panelNumeros.add(jBtnMultiplication);
+
+        jBtn1.setBackground(new java.awt.Color(54, 60, 64));
+        jBtn1.setForeground(new java.awt.Color(242, 244, 245));
+        jBtn1.setFont(new java.awt.Font("Segoe UI", 0, 23)); // NOI18N
+        jBtn1.setText("1");
+        jBtn1.addActionListener(new java.awt.event.ActionListener() {
+            public void actionPerformed(java.awt.event.ActionEvent evt) {
+                jBtn1ActionPerformed(evt);
+            }
+        });
+        panelNumeros.add(jBtn1);
+
+        jBtn2.setBackground(new java.awt.Color(54, 60, 64));
+        jBtn2.setForeground(new java.awt.Color(242, 244, 245));
+        jBtn2.setFont(new java.awt.Font("Segoe UI", 0, 23)); // NOI18N
+        jBtn2.setText("2");
+        jBtn2.addActionListener(new java.awt.event.ActionListener() {
+            public void actionPerformed(java.awt.event.ActionEvent evt) {
+                jBtn2ActionPerformed(evt);
+            }
+        });
+        panelNumeros.add(jBtn2);
+
+        jBtn3.setBackground(new java.awt.Color(54, 60, 64));
+        jBtn3.setForeground(new java.awt.Color(242, 244, 245));
+        jBtn3.setFont(new java.awt.Font("Segoe UI", 0, 23)); // NOI18N
+        jBtn3.setText("3");
+        jBtn3.addActionListener(new java.awt.event.ActionListener() {
+            public void actionPerformed(java.awt.event.ActionEvent evt) {
+                jBtn3ActionPerformed(evt);
+            }
+        });
+        panelNumeros.add(jBtn3);
+
+        jBtnMinus.setBackground(new java.awt.Color(54, 60, 64));
+        jBtnMinus.setForeground(new java.awt.Color(181, 228, 59));
+        jBtnMinus.setFont(new java.awt.Font("Segoe UI", 0, 23)); // NOI18N
+        jBtnMinus.setText("−");
+        jBtnMinus.addActionListener(new java.awt.event.ActionListener() {
+            public void actionPerformed(java.awt.event.ActionEvent evt) {
+                jBtnMinusActionPerformed(evt);
+            }
+        });
+        panelNumeros.add(jBtnMinus);
+
+        jBtnNegativeNum.setBackground(new java.awt.Color(54, 60, 64));
+        jBtnNegativeNum.setForeground(new java.awt.Color(242, 244, 245));
+        jBtnNegativeNum.setFont(new java.awt.Font("Segoe UI", 0, 23)); // NOI18N
+        jBtnNegativeNum.setText("±");
+        jBtnNegativeNum.addActionListener(new java.awt.event.ActionListener() {
+            public void actionPerformed(java.awt.event.ActionEvent evt) {
+                jBtnNegativeNumActionPerformed(evt);
+            }
+        });
+        panelNumeros.add(jBtnNegativeNum);
+
+        jBtn0.setBackground(new java.awt.Color(54, 60, 64));
+        jBtn0.setForeground(new java.awt.Color(242, 244, 245));
+        jBtn0.setFont(new java.awt.Font("Segoe UI", 0, 23)); // NOI18N
+        jBtn0.setText("0");
+        jBtn0.addActionListener(new java.awt.event.ActionListener() {
+            public void actionPerformed(java.awt.event.ActionEvent evt) {
+                jBtn0ActionPerformed(evt);
+            }
+        });
+        panelNumeros.add(jBtn0);
+
+        jBtnDot.setBackground(new java.awt.Color(54, 60, 64));
+        jBtnDot.setForeground(new java.awt.Color(242, 244, 245));
+        jBtnDot.setFont(new java.awt.Font("Segoe UI", 0, 23)); // NOI18N
+        jBtnDot.setText(".");
+        jBtnDot.addActionListener(new java.awt.event.ActionListener() {
+            public void actionPerformed(java.awt.event.ActionEvent evt) {
+                jBtnDotActionPerformed(evt);
+            }
+        });
+        panelNumeros.add(jBtnDot);
+
+        jBtnSum.setBackground(new java.awt.Color(54, 60, 64));
+        jBtnSum.setForeground(new java.awt.Color(181, 228, 59));
+        jBtnSum.setFont(new java.awt.Font("Segoe UI", 0, 23)); // NOI18N
+        jBtnSum.setText("+");
+        jBtnSum.addActionListener(new java.awt.event.ActionListener() {
+            public void actionPerformed(java.awt.event.ActionEvent evt) {
+                jBtnSumActionPerformed(evt);
+            }
+        });
+        panelNumeros.add(jBtnSum);
+
+        panelTeclado.add(panelNumeros, java.awt.BorderLayout.CENTER);
+
+        panelResultado.setBackground(new java.awt.Color(37, 41, 45));
+        panelResultado.setForeground(new java.awt.Color(242, 244, 245));
+        panelResultado.setPreferredSize(new java.awt.Dimension(400, 62));
+        panelResultado.setLayout(new java.awt.GridLayout(1, 2, 10, 0));
+
+        jBtnClear.setBackground(new java.awt.Color(54, 60, 64));
+        jBtnClear.setForeground(new java.awt.Color(242, 244, 245));
+        jBtnClear.setFont(new java.awt.Font("Segoe UI", 0, 23)); // NOI18N
+        jBtnClear.setText("Limpiar");
+        jBtnClear.addActionListener(new java.awt.event.ActionListener() {
+            public void actionPerformed(java.awt.event.ActionEvent evt) {
+                jBtnClearActionPerformed(evt);
+            }
+        });
+        panelResultado.add(jBtnClear);
+
+        jBtnResult.setBackground(new java.awt.Color(181, 228, 59));
+        jBtnResult.setForeground(new java.awt.Color(37, 41, 45));
+        jBtnResult.setFont(new java.awt.Font("Segoe UI", 0, 32)); // NOI18N
+        jBtnResult.setText("=");
+        jBtnResult.addActionListener(new java.awt.event.ActionListener() {
+            public void actionPerformed(java.awt.event.ActionEvent evt) {
+                jBtnResultActionPerformed(evt);
+            }
+        });
+        panelResultado.add(jBtnResult);
+
+        panelTeclado.add(panelResultado, java.awt.BorderLayout.SOUTH);
+
+        panelOperaciones.add(panelTeclado, java.awt.BorderLayout.CENTER);
+
+        gridBagConstraints = new java.awt.GridBagConstraints();
+        gridBagConstraints.gridx = 0;
+        gridBagConstraints.gridy = 0;
+        gridBagConstraints.fill = java.awt.GridBagConstraints.BOTH;
+        gridBagConstraints.weightx = 0.62;
+        gridBagConstraints.weighty = 1.0;
+        gridBagConstraints.insets = new java.awt.Insets(0, 0, 0, 20);
+        panelCuerpo.add(panelOperaciones, gridBagConstraints);
+
+        panelFunciones.setBackground(new java.awt.Color(37, 41, 45));
+        panelFunciones.setForeground(new java.awt.Color(242, 244, 245));
+        panelFunciones.setLayout(new java.awt.BorderLayout(0, 12));
+
+        tituloFunciones.setBackground(new java.awt.Color(37, 41, 45));
+        tituloFunciones.setForeground(new java.awt.Color(242, 244, 245));
+        tituloFunciones.setFont(new java.awt.Font("Segoe UI", 0, 15)); // NOI18N
+        tituloFunciones.setText("FUNCIONES");
+        panelFunciones.add(tituloFunciones, java.awt.BorderLayout.NORTH);
+
+        panelCientifico.setBackground(new java.awt.Color(37, 41, 45));
+        panelCientifico.setForeground(new java.awt.Color(242, 244, 245));
+        panelCientifico.setLayout(new java.awt.BorderLayout(0, 16));
+
+        jPanel1.setBackground(new java.awt.Color(37, 41, 45));
+        jPanel1.setForeground(new java.awt.Color(242, 244, 245));
+        jPanel1.setLayout(new java.awt.GridLayout(3, 2, 10, 10));
+
+        jBtn11.setBackground(new java.awt.Color(54, 60, 64));
+        jBtn11.setForeground(new java.awt.Color(181, 228, 59));
+        jBtn11.setFont(new java.awt.Font("Segoe UI", 0, 23)); // NOI18N
         jBtn11.setText("sin");
-        jBtn11.setAlignmentY(0.0F);
         jBtn11.addActionListener(new java.awt.event.ActionListener() {
             public void actionPerformed(java.awt.event.ActionEvent evt) {
                 jBtn11ActionPerformed(evt);
             }
         });
+        jPanel1.add(jBtn11);
 
-        jBtn12.setBackground(new java.awt.Color(64, 64, 64));
-        jBtn12.setFont(new java.awt.Font("Tahoma", 1, 18)); // NOI18N
-        jBtn12.setForeground(new java.awt.Color(172, 230, 0));
-        jBtn12.setText("cos");
-        jBtn12.setAlignmentY(0.0F);
-        jBtn12.addActionListener(new java.awt.event.ActionListener() {
-            public void actionPerformed(java.awt.event.ActionEvent evt) {
-                jBtn12ActionPerformed(evt);
-            }
-        });
-
-        jBtn13.setBackground(new java.awt.Color(64, 64, 64));
-        jBtn13.setFont(new java.awt.Font("Tahoma", 1, 18)); // NOI18N
-        jBtn13.setForeground(new java.awt.Color(172, 230, 0));
-        jBtn13.setText("tan");
-        jBtn13.setAlignmentY(0.0F);
-        jBtn13.addActionListener(new java.awt.event.ActionListener() {
-            public void actionPerformed(java.awt.event.ActionEvent evt) {
-                jBtn13ActionPerformed(evt);
-            }
-        });
-
-        jBtn14.setBackground(new java.awt.Color(64, 64, 64));
-        jBtn14.setFont(new java.awt.Font("Tahoma", 1, 18)); // NOI18N
-        jBtn14.setForeground(new java.awt.Color(172, 230, 0));
+        jBtn14.setBackground(new java.awt.Color(54, 60, 64));
+        jBtn14.setForeground(new java.awt.Color(181, 228, 59));
+        jBtn14.setFont(new java.awt.Font("Segoe UI", 0, 23)); // NOI18N
         jBtn14.setText("asin");
-        jBtn14.setAlignmentY(0.0F);
         jBtn14.addActionListener(new java.awt.event.ActionListener() {
             public void actionPerformed(java.awt.event.ActionEvent evt) {
                 jBtn14ActionPerformed(evt);
             }
         });
+        jPanel1.add(jBtn14);
 
-        jBtn15.setBackground(new java.awt.Color(64, 64, 64));
-        jBtn15.setFont(new java.awt.Font("Tahoma", 1, 18)); // NOI18N
-        jBtn15.setForeground(new java.awt.Color(172, 230, 0));
+        jBtn12.setBackground(new java.awt.Color(54, 60, 64));
+        jBtn12.setForeground(new java.awt.Color(181, 228, 59));
+        jBtn12.setFont(new java.awt.Font("Segoe UI", 0, 23)); // NOI18N
+        jBtn12.setText("cos");
+        jBtn12.addActionListener(new java.awt.event.ActionListener() {
+            public void actionPerformed(java.awt.event.ActionEvent evt) {
+                jBtn12ActionPerformed(evt);
+            }
+        });
+        jPanel1.add(jBtn12);
+
+        jBtn15.setBackground(new java.awt.Color(54, 60, 64));
+        jBtn15.setForeground(new java.awt.Color(181, 228, 59));
+        jBtn15.setFont(new java.awt.Font("Segoe UI", 0, 23)); // NOI18N
         jBtn15.setText("acos");
-        jBtn15.setAlignmentY(0.0F);
         jBtn15.addActionListener(new java.awt.event.ActionListener() {
             public void actionPerformed(java.awt.event.ActionEvent evt) {
                 jBtn15ActionPerformed(evt);
             }
         });
+        jPanel1.add(jBtn15);
 
-        jBtn16.setBackground(new java.awt.Color(64, 64, 64));
-        jBtn16.setFont(new java.awt.Font("Tahoma", 1, 18)); // NOI18N
-        jBtn16.setForeground(new java.awt.Color(172, 230, 0));
+        jBtn13.setBackground(new java.awt.Color(54, 60, 64));
+        jBtn13.setForeground(new java.awt.Color(181, 228, 59));
+        jBtn13.setFont(new java.awt.Font("Segoe UI", 0, 23)); // NOI18N
+        jBtn13.setText("tan");
+        jBtn13.addActionListener(new java.awt.event.ActionListener() {
+            public void actionPerformed(java.awt.event.ActionEvent evt) {
+                jBtn13ActionPerformed(evt);
+            }
+        });
+        jPanel1.add(jBtn13);
+
+        jBtn16.setBackground(new java.awt.Color(54, 60, 64));
+        jBtn16.setForeground(new java.awt.Color(181, 228, 59));
+        jBtn16.setFont(new java.awt.Font("Segoe UI", 0, 23)); // NOI18N
         jBtn16.setText("atan");
-        jBtn16.setAlignmentY(0.0F);
         jBtn16.addActionListener(new java.awt.event.ActionListener() {
             public void actionPerformed(java.awt.event.ActionEvent evt) {
                 jBtn16ActionPerformed(evt);
             }
         });
+        jPanel1.add(jBtn16);
 
-        jBtn17.setBackground(new java.awt.Color(64, 64, 64));
-        jBtn17.setFont(new java.awt.Font("Tahoma", 1, 18)); // NOI18N
-        jBtn17.setForeground(new java.awt.Color(172, 230, 0));
-        jBtn17.setText("RAD");
-        jBtn17.setAlignmentY(0.0F);
+        panelCientifico.add(jPanel1, java.awt.BorderLayout.CENTER);
+
+        panelUnidad.setBackground(new java.awt.Color(37, 41, 45));
+        panelUnidad.setForeground(new java.awt.Color(242, 244, 245));
+        panelUnidad.setPreferredSize(new java.awt.Dimension(250, 124));
+        panelUnidad.setLayout(new java.awt.GridLayout(3, 1, 0, 6));
+
+        tituloUnidad.setBackground(new java.awt.Color(37, 41, 45));
+        tituloUnidad.setForeground(new java.awt.Color(188, 196, 202));
+        tituloUnidad.setFont(new java.awt.Font("Segoe UI", 0, 14)); // NOI18N
+        tituloUnidad.setText("Unidad angular");
+        panelUnidad.add(tituloUnidad);
+
+        panelSelector.setBackground(new java.awt.Color(37, 41, 45));
+        panelSelector.setForeground(new java.awt.Color(242, 244, 245));
+        panelSelector.setLayout(new java.awt.GridLayout(1, 2, 6, 0));
+
+        jBtn17.setBackground(new java.awt.Color(54, 60, 64));
+        jBtn17.setForeground(new java.awt.Color(242, 244, 245));
+        jBtn17.setFont(new java.awt.Font("Segoe UI", 0, 16)); // NOI18N
+        jBtn17.setText("Grados");
         jBtn17.addActionListener(new java.awt.event.ActionListener() {
             public void actionPerformed(java.awt.event.ActionEvent evt) {
                 jBtn17ActionPerformed(evt);
             }
         });
+        panelSelector.add(jBtn17);
 
-        jBtn18.setBackground(new java.awt.Color(64, 64, 64));
-        jBtn18.setFont(new java.awt.Font("Tahoma", 1, 18)); // NOI18N
-        jBtn18.setForeground(new java.awt.Color(172, 230, 0));
-        jBtn18.setText("Graficar");
-        jBtn18.setAlignmentY(0.0F);
+        jBtnRadianes.setBackground(new java.awt.Color(54, 60, 64));
+        jBtnRadianes.setForeground(new java.awt.Color(242, 244, 245));
+        jBtnRadianes.setFont(new java.awt.Font("Segoe UI", 0, 16)); // NOI18N
+        jBtnRadianes.setText("Radianes");
+        jBtnRadianes.addActionListener(new java.awt.event.ActionListener() {
+            public void actionPerformed(java.awt.event.ActionEvent evt) {
+                jBtnRadianesActionPerformed(evt);
+            }
+        });
+        panelSelector.add(jBtnRadianes);
+
+        panelUnidad.add(panelSelector);
+
+        estadoModo.setBackground(new java.awt.Color(37, 41, 45));
+        estadoModo.setForeground(new java.awt.Color(188, 196, 202));
+        estadoModo.setFont(new java.awt.Font("Segoe UI", 0, 13)); // NOI18N
+        estadoModo.setText("Grados activo");
+        panelUnidad.add(estadoModo);
+
+        panelCientifico.add(panelUnidad, java.awt.BorderLayout.SOUTH);
+
+        panelFunciones.add(panelCientifico, java.awt.BorderLayout.CENTER);
+
+        gridBagConstraints = new java.awt.GridBagConstraints();
+        gridBagConstraints.gridx = 1;
+        gridBagConstraints.gridy = 0;
+        gridBagConstraints.fill = java.awt.GridBagConstraints.BOTH;
+        gridBagConstraints.weightx = 0.38;
+        gridBagConstraints.weighty = 1.0;
+        panelCuerpo.add(panelFunciones, gridBagConstraints);
+
+        panelPrincipal.add(panelCuerpo, java.awt.BorderLayout.CENTER);
+
+        panelAcciones.setBackground(new java.awt.Color(37, 41, 45));
+        panelAcciones.setForeground(new java.awt.Color(242, 244, 245));
+        panelAcciones.setPreferredSize(new java.awt.Dimension(710, 58));
+        panelAcciones.setLayout(new java.awt.GridLayout(1, 2, 12, 0));
+
+        jBtn10.setBackground(new java.awt.Color(54, 60, 64));
+        jBtn10.setForeground(new java.awt.Color(242, 244, 245));
+        jBtn10.setFont(new java.awt.Font("Segoe UI", 0, 23)); // NOI18N
+        jBtn10.setText("Historial");
+        jBtn10.addActionListener(new java.awt.event.ActionListener() {
+            public void actionPerformed(java.awt.event.ActionEvent evt) {
+                jBtn10ActionPerformed(evt);
+            }
+        });
+        panelAcciones.add(jBtn10);
+
+        jBtn18.setBackground(new java.awt.Color(54, 60, 64));
+        jBtn18.setForeground(new java.awt.Color(181, 228, 59));
+        jBtn18.setFont(new java.awt.Font("Segoe UI", 0, 23)); // NOI18N
+        jBtn18.setText("Ver gráfica");
         jBtn18.addActionListener(new java.awt.event.ActionListener() {
             public void actionPerformed(java.awt.event.ActionEvent evt) {
                 jBtn18ActionPerformed(evt);
             }
         });
+        panelAcciones.add(jBtn18);
 
-        javax.swing.GroupLayout jPanel1Layout = new javax.swing.GroupLayout(jPanel1);
-        jPanel1.setLayout(jPanel1Layout);
-        jPanel1Layout.setHorizontalGroup(
-            jPanel1Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-            .addGroup(jPanel1Layout.createSequentialGroup()
-                .addContainerGap()
-                .addGroup(jPanel1Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-                    .addGroup(jPanel1Layout.createSequentialGroup()
-                        .addGroup(jPanel1Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.TRAILING, false)
-                            .addComponent(jBtn11, javax.swing.GroupLayout.DEFAULT_SIZE, 85, Short.MAX_VALUE)
-                            .addComponent(jBtn13, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
-                            .addComponent(jBtn15, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
-                        .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                        .addGroup(jPanel1Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-                            .addComponent(jBtn16, javax.swing.GroupLayout.DEFAULT_SIZE, 88, Short.MAX_VALUE)
-                            .addComponent(jBtn14, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
-                            .addComponent(jBtn12, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)))
-                    .addComponent(jBtn18, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
-                    .addGroup(jPanel1Layout.createSequentialGroup()
-                        .addComponent(jBtn17, javax.swing.GroupLayout.PREFERRED_SIZE, 142, javax.swing.GroupLayout.PREFERRED_SIZE)
-                        .addGap(0, 0, Short.MAX_VALUE)))
-                .addContainerGap())
-        );
-        jPanel1Layout.setVerticalGroup(
-            jPanel1Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-            .addGroup(jPanel1Layout.createSequentialGroup()
-                .addContainerGap()
-                .addGroup(jPanel1Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
-                    .addComponent(jBtn11, javax.swing.GroupLayout.PREFERRED_SIZE, 73, javax.swing.GroupLayout.PREFERRED_SIZE)
-                    .addComponent(jBtn12, javax.swing.GroupLayout.PREFERRED_SIZE, 73, javax.swing.GroupLayout.PREFERRED_SIZE))
-                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                .addGroup(jPanel1Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
-                    .addComponent(jBtn13, javax.swing.GroupLayout.PREFERRED_SIZE, 73, javax.swing.GroupLayout.PREFERRED_SIZE)
-                    .addComponent(jBtn14, javax.swing.GroupLayout.PREFERRED_SIZE, 73, javax.swing.GroupLayout.PREFERRED_SIZE))
-                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                .addGroup(jPanel1Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
-                    .addComponent(jBtn15, javax.swing.GroupLayout.PREFERRED_SIZE, 73, javax.swing.GroupLayout.PREFERRED_SIZE)
-                    .addComponent(jBtn16, javax.swing.GroupLayout.PREFERRED_SIZE, 73, javax.swing.GroupLayout.PREFERRED_SIZE))
-                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                .addComponent(jBtn17, javax.swing.GroupLayout.PREFERRED_SIZE, 73, javax.swing.GroupLayout.PREFERRED_SIZE)
-                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.UNRELATED)
-                .addComponent(jBtn18, javax.swing.GroupLayout.PREFERRED_SIZE, 52, javax.swing.GroupLayout.PREFERRED_SIZE)
-                .addContainerGap(javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
-        );
+        panelPrincipal.add(panelAcciones, java.awt.BorderLayout.SOUTH);
 
-        javax.swing.GroupLayout layout = new javax.swing.GroupLayout(getContentPane());
-        getContentPane().setLayout(layout);
-        layout.setHorizontalGroup(
-            layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-            .addGroup(layout.createSequentialGroup()
-                .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-                    .addGroup(layout.createSequentialGroup()
-                        .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING, false)
-                            .addGroup(layout.createSequentialGroup()
-                                .addComponent(jBtn1, javax.swing.GroupLayout.PREFERRED_SIZE, 73, javax.swing.GroupLayout.PREFERRED_SIZE)
-                                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                                .addComponent(jBtn2, javax.swing.GroupLayout.PREFERRED_SIZE, 73, javax.swing.GroupLayout.PREFERRED_SIZE)
-                                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                                .addComponent(jBtn3, javax.swing.GroupLayout.PREFERRED_SIZE, 73, javax.swing.GroupLayout.PREFERRED_SIZE)
-                                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
-                                .addComponent(jBtnMultiplication, javax.swing.GroupLayout.PREFERRED_SIZE, 73, javax.swing.GroupLayout.PREFERRED_SIZE))
-                            .addGroup(layout.createSequentialGroup()
-                                .addComponent(jBtn4, javax.swing.GroupLayout.PREFERRED_SIZE, 73, javax.swing.GroupLayout.PREFERRED_SIZE)
-                                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                                .addComponent(jBtn5, javax.swing.GroupLayout.PREFERRED_SIZE, 73, javax.swing.GroupLayout.PREFERRED_SIZE)
-                                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                                .addComponent(jBtn6, javax.swing.GroupLayout.PREFERRED_SIZE, 73, javax.swing.GroupLayout.PREFERRED_SIZE)
-                                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                                .addComponent(jBtnDivision, javax.swing.GroupLayout.PREFERRED_SIZE, 73, javax.swing.GroupLayout.PREFERRED_SIZE))
-                            .addGroup(layout.createSequentialGroup()
-                                .addComponent(jBtn7, javax.swing.GroupLayout.PREFERRED_SIZE, 73, javax.swing.GroupLayout.PREFERRED_SIZE)
-                                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                                .addComponent(jBtn8, javax.swing.GroupLayout.PREFERRED_SIZE, 73, javax.swing.GroupLayout.PREFERRED_SIZE)
-                                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                                .addComponent(jBtn9, javax.swing.GroupLayout.PREFERRED_SIZE, 73, javax.swing.GroupLayout.PREFERRED_SIZE)
-                                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                                .addComponent(jBtnSum, javax.swing.GroupLayout.PREFERRED_SIZE, 73, javax.swing.GroupLayout.PREFERRED_SIZE))
-                            .addGroup(layout.createSequentialGroup()
-                                .addComponent(jBtn0, javax.swing.GroupLayout.PREFERRED_SIZE, 73, javax.swing.GroupLayout.PREFERRED_SIZE)
-                                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                                .addComponent(jBtnDot, javax.swing.GroupLayout.PREFERRED_SIZE, 73, javax.swing.GroupLayout.PREFERRED_SIZE)
-                                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                                .addComponent(jBtnNegativeNum, javax.swing.GroupLayout.PREFERRED_SIZE, 73, javax.swing.GroupLayout.PREFERRED_SIZE)
-                                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                                .addComponent(jBtnMinus, javax.swing.GroupLayout.PREFERRED_SIZE, 73, javax.swing.GroupLayout.PREFERRED_SIZE))
-                            .addGroup(layout.createSequentialGroup()
-                                .addComponent(jBtn10, javax.swing.GroupLayout.PREFERRED_SIZE, 73, javax.swing.GroupLayout.PREFERRED_SIZE)
-                                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                                .addComponent(jBtnClear, javax.swing.GroupLayout.PREFERRED_SIZE, 73, javax.swing.GroupLayout.PREFERRED_SIZE)
-                                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                                .addComponent(jBtnResult, javax.swing.GroupLayout.PREFERRED_SIZE, 152, javax.swing.GroupLayout.PREFERRED_SIZE)))
-                        .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.UNRELATED)
-                        .addComponent(jPanel1, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
-                        .addGap(0, 13, Short.MAX_VALUE))
-                    .addGroup(layout.createSequentialGroup()
-                        .addContainerGap()
-                        .addComponent(jTxtDisplay)))
-                .addContainerGap())
-        );
-        layout.setVerticalGroup(
-            layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-            .addGroup(layout.createSequentialGroup()
-                .addContainerGap()
-                .addComponent(jTxtDisplay, javax.swing.GroupLayout.PREFERRED_SIZE, 67, javax.swing.GroupLayout.PREFERRED_SIZE)
-                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-                    .addGroup(layout.createSequentialGroup()
-                        .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-                            .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
-                                .addComponent(jBtn1, javax.swing.GroupLayout.PREFERRED_SIZE, 73, javax.swing.GroupLayout.PREFERRED_SIZE)
-                                .addComponent(jBtn2, javax.swing.GroupLayout.PREFERRED_SIZE, 73, javax.swing.GroupLayout.PREFERRED_SIZE)
-                                .addComponent(jBtn3, javax.swing.GroupLayout.PREFERRED_SIZE, 73, javax.swing.GroupLayout.PREFERRED_SIZE))
-                            .addComponent(jBtnMultiplication, javax.swing.GroupLayout.Alignment.TRAILING, javax.swing.GroupLayout.PREFERRED_SIZE, 73, javax.swing.GroupLayout.PREFERRED_SIZE))
-                        .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                        .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-                            .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
-                                .addComponent(jBtn4, javax.swing.GroupLayout.PREFERRED_SIZE, 73, javax.swing.GroupLayout.PREFERRED_SIZE)
-                                .addComponent(jBtn5, javax.swing.GroupLayout.PREFERRED_SIZE, 73, javax.swing.GroupLayout.PREFERRED_SIZE)
-                                .addComponent(jBtn6, javax.swing.GroupLayout.PREFERRED_SIZE, 73, javax.swing.GroupLayout.PREFERRED_SIZE))
-                            .addComponent(jBtnDivision, javax.swing.GroupLayout.Alignment.TRAILING, javax.swing.GroupLayout.PREFERRED_SIZE, 73, javax.swing.GroupLayout.PREFERRED_SIZE))
-                        .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                        .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-                            .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
-                                .addComponent(jBtn7, javax.swing.GroupLayout.PREFERRED_SIZE, 73, javax.swing.GroupLayout.PREFERRED_SIZE)
-                                .addComponent(jBtn8, javax.swing.GroupLayout.PREFERRED_SIZE, 73, javax.swing.GroupLayout.PREFERRED_SIZE)
-                                .addComponent(jBtn9, javax.swing.GroupLayout.PREFERRED_SIZE, 73, javax.swing.GroupLayout.PREFERRED_SIZE))
-                            .addComponent(jBtnSum, javax.swing.GroupLayout.Alignment.TRAILING, javax.swing.GroupLayout.PREFERRED_SIZE, 73, javax.swing.GroupLayout.PREFERRED_SIZE))
-                        .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                        .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-                            .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-                                .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
-                                    .addComponent(jBtn0, javax.swing.GroupLayout.PREFERRED_SIZE, 73, javax.swing.GroupLayout.PREFERRED_SIZE)
-                                    .addComponent(jBtnNegativeNum, javax.swing.GroupLayout.PREFERRED_SIZE, 73, javax.swing.GroupLayout.PREFERRED_SIZE))
-                                .addComponent(jBtnMinus, javax.swing.GroupLayout.Alignment.TRAILING, javax.swing.GroupLayout.PREFERRED_SIZE, 73, javax.swing.GroupLayout.PREFERRED_SIZE))
-                            .addComponent(jBtnDot, javax.swing.GroupLayout.Alignment.TRAILING, javax.swing.GroupLayout.PREFERRED_SIZE, 73, javax.swing.GroupLayout.PREFERRED_SIZE))
-                        .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                        .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-                            .addComponent(jBtnClear, javax.swing.GroupLayout.PREFERRED_SIZE, 73, javax.swing.GroupLayout.PREFERRED_SIZE)
-                            .addComponent(jBtn10, javax.swing.GroupLayout.PREFERRED_SIZE, 73, javax.swing.GroupLayout.PREFERRED_SIZE)
-                            .addComponent(jBtnResult, javax.swing.GroupLayout.PREFERRED_SIZE, 73, javax.swing.GroupLayout.PREFERRED_SIZE))
-                        .addGap(0, 6, Short.MAX_VALUE))
-                    .addComponent(jPanel1, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
-                .addContainerGap())
-        );
+        getContentPane().add(panelPrincipal, java.awt.BorderLayout.CENTER);
 
         pack();
     }// </editor-fold>//GEN-END:initComponents
 
     private void jTxtDisplayActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jTxtDisplayActionPerformed
-        // TODO add your handling code here:
+        resolverOperacion();
+        jTxtDisplay.setText("");
     }//GEN-LAST:event_jTxtDisplayActionPerformed
 
     private void jBtn1ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jBtn1ActionPerformed
@@ -620,103 +869,44 @@ public class Calculator extends javax.swing.JFrame {
     }//GEN-LAST:event_jBtn0ActionPerformed
 
     private void jBtnNegativeNumActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jBtnNegativeNumActionPerformed
-        double ops = Double.parseDouble(String.valueOf(jTxtDisplay.getText()));
-        ops = ops * (-1);
-        jTxtDisplay.setText(String.valueOf(ops));
+        if (esperandoOperando || jTxtDisplay.getText().isBlank() || jTxtDisplay.getText().equals("Error")) mostrarNumero("0");
+        esperandoOperando = resultadoMostrado = false;
+        operandoVisual = null;
+        String texto = jTxtDisplay.getText();
+        mostrarNumero(texto.startsWith("-") ? texto.substring(1) : "-" + texto);
+        actualizarExpresion();
     }//GEN-LAST:event_jBtnNegativeNumActionPerformed
 
     private void jBtnDotActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jBtnDotActionPerformed
-        String dotNew = jTxtDisplay.getText() + jBtnDot.getText();
-        jTxtDisplay.setText(dotNew);
-        String textoActual = jTxtDisplay.getText();
-        
-        if (textoActual.equals("Error")) {
-            jTxtDisplay.setText("0.");
-        } else if (!textoActual.contains(".")) {
-            jTxtDisplay.setText(textoActual + ".");
-        }
+        prepararEntrada();
+        String texto = jTxtDisplay.getText();
+        if (!texto.contains(".")) mostrarNumero(texto + ".");
+        actualizarExpresion();
     }//GEN-LAST:event_jBtnDotActionPerformed
 
     private void jBtnClearActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jBtnClearActionPerformed
-        jTxtDisplay.setText("");
+        expresionVisible.setText("");
+        limpiarPantalla();
     }//GEN-LAST:event_jBtnClearActionPerformed
 
     private void jBtnSumActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jBtnSumActionPerformed
-      if (!jTxtDisplay.getText().isEmpty()) {
-            firstNum = Double.parseDouble(jTxtDisplay.getText());
-            jTxtDisplay.setText("");
-            operation = "+";
-        }
+        seleccionarOperacion("+");
     }//GEN-LAST:event_jBtnSumActionPerformed
 
     private void jBtnResultActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jBtnResultActionPerformed
-try {
-            // 1. Capturamos el segundo número de la pantalla
-            secondNum = Double.parseDouble(jTxtDisplay.getText());
-            
-            // 2. Preparamos los datos para el Dominio
-            double[] operandos = {firstNum, secondNum};
-            Operacion operacionMatematica = null;
-
-            // 3. Seleccionamos la operación (Asegúrate de tener importadas estas clases)
-            if (operation != null) {
-                switch (operation) {
-                    case "+":
-                        operacionMatematica = new Suma();
-                        break;
-                    case "/":
-                        operacionMatematica = new Division();
-                        break;
-                    case "-":
-                        operacionMatematica = new Resta();
-                        break;
-                    case "*":
-                        operacionMatematica = new Multiplicacion();
-                        break;
-                }
-            }
-
-            // 4. Mandamos a ejecutar al Servicio (la lógica y base de datos están allá)
-            if (operacionMatematica != null) {
-                result = servicio.ejecutarYGuardar(operacionMatematica, operandos);
-                
-                // 5. Mostramos el resultado en pantalla
-                if (result % 1 == 0) {
-                    jTxtDisplay.setText(String.format("%.0f", result));
-                } else {
-                    jTxtDisplay.setText(String.valueOf(result));
-                }
-            }
-
-        } catch (NumberFormatException ex) {
-            jTxtDisplay.setText("Error");
-        } catch (CalculadoraException ex) { // Captura divisiones por cero u otros errores de negocio
-            jTxtDisplay.setText("Error");
-        }
+        resolverOperacion();
     }//GEN-LAST:event_jBtnResultActionPerformed
 
     private void jBtnMinusActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jBtnMinusActionPerformed
-      if (!jTxtDisplay.getText().isEmpty()) {
-            firstNum = Double.parseDouble(jTxtDisplay.getText());
-            jTxtDisplay.setText("");
-            operation = "-";
-        }
+        seleccionarOperacion("-");
     }//GEN-LAST:event_jBtnMinusActionPerformed
 
     private void jBtnMultiplicationActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jBtnMultiplicationActionPerformed
-        if (!jTxtDisplay.getText().isEmpty()) {
-            firstNum = Double.parseDouble(jTxtDisplay.getText());
-            jTxtDisplay.setText("");
-            operation = "*";
-        }
+        seleccionarOperacion("*");
     }//GEN-LAST:event_jBtnMultiplicationActionPerformed
 
     private void jBtnDivisionActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jBtnDivisionActionPerformed
- if (!jTxtDisplay.getText().isEmpty()) {
-            firstNum = Double.parseDouble(jTxtDisplay.getText());
-            jTxtDisplay.setText("");
-            operation = "/";
-        }
+        seleccionarOperacion("/");
     }//GEN-LAST:event_jBtnDivisionActionPerformed
 
     private void jBtn10ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jBtn10ActionPerformed
@@ -860,7 +1050,7 @@ try {
                 int index = listaExitosos.getSelectedIndex();
                 if (index >= 0) {
                     double valorSeleccionado = exitosos.get(index).getResultado();
-                    jTxtDisplay.setText(String.valueOf(valorSeleccionado));
+                    cargarDesdeHistorial(valorSeleccionado);
                 }
             }
 
@@ -897,18 +1087,44 @@ try {
     }//GEN-LAST:event_jBtn16ActionPerformed
 
     private void jBtn17ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jBtn17ActionPerformed
-        if (modoActual.equals("grados")) {
-            modoActual = "radianes";
-            jBtn17.setText("RAD");
-        } else {
-            modoActual = "grados";
-            jBtn17.setText("DEG");
-        }
+        cambiarModo("grados");
     }//GEN-LAST:event_jBtn17ActionPerformed
 
+    private void jBtnRadianesActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jBtnRadianesActionPerformed
+        cambiarModo("radianes");
+    }//GEN-LAST:event_jBtnRadianesActionPerformed
+
     private void jBtn18ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jBtn18ActionPerformed
-        new GraficasDialog(this, funcionActual, modoActual).setVisible(true);
+// 1. Obtener el texto de la pantalla principal (jTxtDisplay) y de la expresión superior (expresionVisible)
+    String displayPrincipal = (jTxtDisplay.getText() != null) ? jTxtDisplay.getText().trim() : "";
+    String expresionSuperior = (expresionVisible.getText() != null) ? expresionVisible.getText().trim() : "";
+
+    // 2. VALIDACIÓN ESTRICTA: Si la pantalla está vacía o en estado "Error", NO se abre la ventana
+    boolean pantallaVacia = displayPrincipal.isEmpty() && expresionSuperior.isEmpty();
+    boolean pantallaConError = displayPrincipal.equalsIgnoreCase("Error");
+
+    if (pantallaVacia || pantallaConError) {
+        javax.swing.JOptionPane.showMessageDialog(
+            this,
+            "No hay ningún resultado o dato en pantalla para graficar. Realiza una operación primero.",
+            "Resultado vacío",
+            javax.swing.JOptionPane.WARNING_MESSAGE
+        );
+        return; // SE DETIENE LA EJECUCIÓN: Nunca llega a ejecutar new GraficasDialog(...)
+    }
+
+    // 3. Determinar función y unidad angular tomando la última gráfica o la función activa
+    String funcion = (ultimaGrafica != null) ? ultimaGrafica.funcion() 
+                   : (!funcionActual.isEmpty() ? funcionActual : "sin");
+    String unidad = (ultimaGrafica != null) ? ultimaGrafica.modo() : modoActual;
+
+    // 4. Abre GraficasDialog forzando que no auto-genere puntos al abrir (último parámetro en false)
+    new GraficasDialog(this, funcion, unidad, gestorGraficas, false).setVisible(true);
     }//GEN-LAST:event_jBtn18ActionPerformed
+
+    private void expresionVisibleActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_expresionVisibleActionPerformed
+        // TODO add your handling code here:
+    }//GEN-LAST:event_expresionVisibleActionPerformed
 
     /**
      * @param args the command line arguments
@@ -940,6 +1156,10 @@ try {
     }
 
     // Variables declaration - do not modify//GEN-BEGIN:variables
+    private javax.swing.JLabel ayudaPantalla;
+    private javax.swing.JLabel estadoModo;
+    private javax.swing.JLabel etiquetaPantalla;
+    private javax.swing.JTextField expresionVisible;
     private javax.swing.JButton jBtn0;
     private javax.swing.JButton jBtn1;
     private javax.swing.JButton jBtn10;
@@ -949,7 +1169,7 @@ try {
     private javax.swing.JButton jBtn14;
     private javax.swing.JButton jBtn15;
     private javax.swing.JButton jBtn16;
-    private javax.swing.JButton jBtn17;
+    private javax.swing.JToggleButton jBtn17;
     private javax.swing.JButton jBtn18;
     private javax.swing.JButton jBtn2;
     private javax.swing.JButton jBtn3;
@@ -965,9 +1185,26 @@ try {
     private javax.swing.JButton jBtnMinus;
     private javax.swing.JButton jBtnMultiplication;
     private javax.swing.JButton jBtnNegativeNum;
+    private javax.swing.JToggleButton jBtnRadianes;
     private javax.swing.JButton jBtnResult;
     private javax.swing.JButton jBtnSum;
     private javax.swing.JPanel jPanel1;
     private javax.swing.JTextField jTxtDisplay;
+    private javax.swing.JPanel panelAcciones;
+    private javax.swing.JPanel panelCientifico;
+    private javax.swing.JPanel panelCuerpo;
+    private javax.swing.JPanel panelExpresion;
+    private javax.swing.JPanel panelFunciones;
+    private javax.swing.JPanel panelNumeros;
+    private javax.swing.JPanel panelOperaciones;
+    private javax.swing.JPanel panelPantalla;
+    private javax.swing.JPanel panelPrincipal;
+    private javax.swing.JPanel panelResultado;
+    private javax.swing.JPanel panelSelector;
+    private javax.swing.JPanel panelTeclado;
+    private javax.swing.JPanel panelUnidad;
+    private javax.swing.JLabel tituloFunciones;
+    private javax.swing.JLabel tituloOperaciones;
+    private javax.swing.JLabel tituloUnidad;
     // End of variables declaration//GEN-END:variables
 }
