@@ -122,6 +122,16 @@ public class Calculator extends javax.swing.JFrame {
             public void removeUpdate(javax.swing.event.DocumentEvent e) { entradaManual(); }
             public void changedUpdate(javax.swing.event.DocumentEvent e) { entradaManual(); }
         });
+        jTxtDisplay.addKeyListener(new java.awt.event.KeyAdapter() {
+            @Override
+            public void keyTyped(java.awt.event.KeyEvent evt) {
+                char c = evt.getKeyChar();
+                // Bloquea cualquier carácter que no sea un dígito, un punto o borrar
+                if (!Character.isDigit(c) && c != '.' && c != '\b') {
+                    evt.consume(); 
+                }
+            }
+        });
         limpiarPantalla();
         setMinimumSize(new java.awt.Dimension(740, 690));
         pack();
